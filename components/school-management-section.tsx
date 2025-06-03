@@ -6,10 +6,22 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, Users } from "lucide-react"
+import { Plus, Trash2, Users, UserPlus } from "lucide-react"
 import { supabase, type School, type SchoolAccess } from "@/lib/supabase"
 import { useUser } from "@clerk/nextjs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { getClerkUsers } from "@/app/actions/clerk-actions"
+import type { Role } from "@/lib/permissions"
+
+interface ClerkUserInfo {
+  id: string
+  firstName?: string | null
+  lastName?: string | null
+  email?: string
+  imageUrl?: string
+  createdAt?: string
+}
 
 export function SchoolManagementSection() {
   const { user } = useUser()
@@ -18,14 +30,29 @@ export function SchoolManagementSection() {
   const [showCreateSchoolForm, setShowCreateSchoolForm] = useState(false)
   const [newSchool, setNewSchool] = useState({ name: "", address: "" })
   const [showAccessForm, setShowAccessForm] = useState<number | null>(null)
-  const [newAccess, setNewAccess] = useState({ user_id: "", role: "viewer" })
+  const [newAccess, setNewAccess] = useState({ user_id: "", role: "viewer" as Role })
   const [schoolAccess, setSchoolAccess] = useState<{ [schoolId: number]: SchoolAccess[] }>({})
+  const [clerkUsers, setClerkUsers] = useState<ClerkUserInfo[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
 
   useEffect(() => {
     if (user) {
       fetchUserSchools()
+      fetchClerkUsers()
     }
   }, [user])
+
+  const fetchClerkUsers = async () => {
+    setLoadingUsers(true)
+    try {
+      const users = await getClerkUsers()
+      setClerkUsers(users)
+    } catch (error) {
+      console.error("Error fetching Clerk users:", error)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
 
   const fetchUserSchools = async () => {
     if (!user?.id) return
@@ -153,6 +180,42 @@ export function SchoolManagementSection() {
     return getUserRole(schoolId) === "admin"
   }
 
+  const getUserDisplayName = (userId: string) => {
+    const userInfo = clerkUsers.find((u) => u.id === userId)
+    if (userInfo) {
+      if (userInfo.firstName && userInfo.lastName) {
+        return `${userInfo.firstName} ${userInfo.lastName}`
+      } else if (userInfo.firstName) {
+        return userInfo.firstName
+      } else if (userInfo.email) {
+        return userInfo.email
+      }
+    }
+    return userId.substring(0, 12) + "..."
+  }
+
+  const getUserEmail = (userId: string) => {
+    const userInfo = clerkUsers.find((u) => u.id === userId)
+    return userInfo?.email || "No email"
+  }
+
+  const getUserAvatar = (userId: string) => {
+    const userInfo = clerkUsers.find((u) => u.id === userId)
+    return userInfo?.imageUrl || ""
+  }
+
+  const getUserInitials = (userId: string) => {
+    const userInfo = clerkUsers.find((u) => u.id === userId)
+    if (userInfo?.firstName && userInfo?.lastName) {
+      return `${userInfo.firstName[0]}${userInfo.lastName[0]}`.toUpperCase()
+    } else if (userInfo?.firstName) {
+      return userInfo.firstName[0].toUpperCase()
+    } else if (userInfo?.email) {
+      return userInfo.email[0].toUpperCase()
+    }
+    return "U"
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -246,15 +309,42 @@ export function SchoolManagementSection() {
                       <CardContent className="p-4">
                         <h4 className="font-semibold mb-4">Add User Access</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          <Input
-                            placeholder="User ID (from Clerk)"
+                          <Select
                             value={newAccess.user_id}
-                            onChange={(e) => setNewAccess({ ...newAccess, user_id: e.target.value })}
-                            className="w-full"
-                          />
+                            onValueChange={(value) => setNewAccess({ ...newAccess, user_id: value })}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select user..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {loadingUsers ? (
+                                <div className="p-2 text-center">Loading users...</div>
+                              ) : clerkUsers.length === 0 ? (
+                                <div className="p-2 text-center">No users found</div>
+                              ) : (
+                                clerkUsers.map((clerkUser) => (
+                                  <SelectItem key={clerkUser.id} value={clerkUser.id}>
+                                    <div className="flex items-center gap-2">
+                                      <Avatar className="h-6 w-6">
+                                        <AvatarImage src={clerkUser.imageUrl || "/placeholder.svg"} />
+                                        <AvatarFallback>
+                                          {clerkUser.firstName?.[0] || clerkUser.email?.[0] || "U"}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span>
+                                        {clerkUser.firstName && clerkUser.lastName
+                                          ? `${clerkUser.firstName} ${clerkUser.lastName}`
+                                          : clerkUser.email || clerkUser.id.substring(0, 8)}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
                           <Select
                             value={newAccess.role}
-                            onValueChange={(value) => setNewAccess({ ...newAccess, role: value })}
+                            onValueChange={(value) => setNewAccess({ ...newAccess, role: value as Role })}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Select role" />
@@ -271,6 +361,7 @@ export function SchoolManagementSection() {
                               className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
                               disabled={!newAccess.user_id}
                             >
+                              <UserPlus className="h-4 w-4 mr-2" />
                               Add
                             </Button>
                             <Button
@@ -296,7 +387,8 @@ export function SchoolManagementSection() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>User ID</TableHead>
+                              <TableHead>User</TableHead>
+                              <TableHead>Email</TableHead>
                               <TableHead>Role</TableHead>
                               {canManageAccess(school.id) && <TableHead>Actions</TableHead>}
                             </TableRow>
@@ -304,9 +396,33 @@ export function SchoolManagementSection() {
                           <TableBody>
                             {schoolAccess[school.id].map((access) => (
                               <TableRow key={access.id}>
-                                <TableCell className="font-mono text-sm">{access.user_id}</TableCell>
                                 <TableCell>
-                                  <Badge variant={access.role === "admin" ? "default" : "secondary"}>
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-8 w-8">
+                                      <AvatarImage src={getUserAvatar(access.user_id) || "/placeholder.svg"} />
+                                      <AvatarFallback>{getUserInitials(access.user_id)}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="font-medium">{getUserDisplayName(access.user_id)}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-sm text-gray-600">{getUserEmail(access.user_id)}</TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      access.role === "admin"
+                                        ? "default"
+                                        : access.role === "editor"
+                                          ? "secondary"
+                                          : "outline"
+                                    }
+                                    className={
+                                      access.role === "admin"
+                                        ? "bg-[#A2BD9D] hover:bg-[#8FA889]"
+                                        : access.role === "editor"
+                                          ? "bg-gray-200"
+                                          : ""
+                                    }
+                                  >
                                     {access.role}
                                   </Badge>
                                 </TableCell>

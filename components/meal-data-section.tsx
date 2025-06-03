@@ -8,12 +8,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2, X } from "lucide-react"
 import { supabase, type Meal, type MealItem } from "@/lib/supabase"
+import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 
 interface MealDataSectionProps {
   selectedSchoolId: number | null
 }
 
 export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
+  const { permissions, loading: loadingPermissions } = useSchoolPermissions(selectedSchoolId)
   const [meals, setMeals] = useState<(Meal & { meal_items: MealItem[] })[]>([])
   const [loading, setLoading] = useState(false)
   const [editingItem, setEditingItem] = useState<{ mealId: number; itemId?: number } | null>(null)
@@ -57,7 +59,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   }
 
   const addMealItem = async (mealId: number) => {
-    if (!newItem.item_name || !newItem.unit_price || !newItem.quantity) return
+    if (!permissions.canEdit || !newItem.item_name || !newItem.unit_price || !newItem.quantity) return
 
     try {
       const { error } = await supabase.from("meal_items").insert({
@@ -78,6 +80,8 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   }
 
   const deleteMealItem = async (itemId: number) => {
+    if (!permissions.canDelete) return
+
     try {
       const { error } = await supabase.from("meal_items").delete().eq("id", itemId)
 
@@ -89,7 +93,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   }
 
   const createNewMeal = async () => {
-    if (!selectedSchoolId || !newMealDate) return
+    if (!permissions.canCreate || !selectedSchoolId || !newMealDate) return
 
     try {
       // Check if meal already exists for this date and school
@@ -131,6 +135,8 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   }
 
   const deleteMeal = async (mealId: number) => {
+    if (!permissions.canDelete) return
+
     if (!confirm("Are you sure you want to delete this meal day? This will also delete all meal items.")) {
       return
     }
@@ -184,15 +190,30 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
     )
   }
 
+  if (loadingPermissions) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-gray-500">Loading permissions...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <CardTitle className="text-[#A2BD9D]">Meal Data</CardTitle>
-          <Button onClick={() => setShowNewMealForm(true)} className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto">
-            <Plus className="h-4 w-4 mr-2" />
-            Add New Day
-          </Button>
+          {permissions.canCreate && (
+            <Button
+              onClick={() => setShowNewMealForm(true)}
+              className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Day
+            </Button>
+          )}
         </div>
 
         {/* Filters */}
@@ -266,7 +287,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
         )}
       </CardHeader>
       <CardContent>
-        {showNewMealForm && (
+        {showNewMealForm && permissions.canCreate && (
           <Card className="mb-4 border-[#A2BD9D]">
             <CardContent className="p-4">
               <h3 className="font-semibold mb-4">Add New Meal Day</h3>
@@ -314,23 +335,27 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
                     </Badge>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                    <Button
-                      size="sm"
-                      onClick={() => setEditingItem({ mealId: meal.id })}
-                      className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Item
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => deleteMeal(meal.id)}
-                      className="w-full sm:w-auto"
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Delete Day
-                    </Button>
+                    {permissions.canEdit && (
+                      <Button
+                        size="sm"
+                        onClick={() => setEditingItem({ mealId: meal.id })}
+                        className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Item
+                      </Button>
+                    )}
+                    {permissions.canDelete && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteMeal(meal.id)}
+                        className="w-full sm:w-auto"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete Day
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -342,7 +367,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
                         <TableHead>Unit Price</TableHead>
                         <TableHead>Quantity</TableHead>
                         <TableHead>Total</TableHead>
-                        <TableHead>Actions</TableHead>
+                        {permissions.canDelete && <TableHead>Actions</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -352,14 +377,16 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
                           <TableCell>${item.unit_price.toFixed(2)}</TableCell>
                           <TableCell>{item.quantity}</TableCell>
                           <TableCell>${(item.unit_price * item.quantity).toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="destructive" onClick={() => deleteMealItem(item.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
+                          {permissions.canDelete && (
+                            <TableCell>
+                              <Button size="sm" variant="destructive" onClick={() => deleteMealItem(item.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
-                      {editingItem?.mealId === meal.id && (
+                      {editingItem?.mealId === meal.id && permissions.canEdit && (
                         <TableRow>
                           <TableCell>
                             <Input

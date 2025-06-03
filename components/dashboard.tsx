@@ -8,14 +8,25 @@ import { AttendanceDataSection } from "./attendance-data-section"
 import { BillingSection } from "./billing-section"
 import { ExpensesSection } from "./expenses-section"
 import { SchoolManagementSection } from "./school-management-section"
+// Add the useSchoolPermissions hook import
+import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 
+// Update the Dashboard component to include role information
 export function Dashboard() {
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null)
+  const { role } = useSchoolPermissions(selectedSchoolId)
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h2>
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h2>
+          {selectedSchoolId && (
+            <p className="text-sm text-gray-500">
+              Your role: <span className="font-medium capitalize">{role}</span>
+            </p>
+          )}
+        </div>
         <div className="w-full sm:w-auto">
           <SchoolSelector selectedSchoolId={selectedSchoolId} onSchoolChange={setSelectedSchoolId} />
         </div>

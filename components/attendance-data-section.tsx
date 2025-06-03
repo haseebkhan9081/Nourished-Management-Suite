@@ -9,12 +9,14 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2, X } from "lucide-react"
 import { supabase, type Attendance, type Student } from "@/lib/supabase"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 
 interface AttendanceDataSectionProps {
   selectedSchoolId: number | null
 }
 
 export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectionProps) {
+  const { permissions, loading: loadingPermissions } = useSchoolPermissions(selectedSchoolId)
   const [attendance, setAttendance] = useState<(Attendance & { students: Student })[]>([])
   const [loading, setLoading] = useState(false)
   const [editingPunchTime, setEditingPunchTime] = useState<{ attendanceId: number } | null>(null)
@@ -212,18 +214,30 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
     )
   }
 
+  if (loadingPermissions) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-gray-500">Loading permissions...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <CardTitle className="text-[#A2BD9D]">Attendance Data</CardTitle>
-          <Button
-            onClick={() => setShowNewAttendanceForm(true)}
-            className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add New Day
-          </Button>
+          {permissions.canCreate && (
+            <Button
+              onClick={() => setShowNewAttendanceForm(true)}
+              className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Day
+            </Button>
+          )}
         </div>
 
         {/* Filters */}
@@ -297,7 +311,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
         )}
       </CardHeader>
       <CardContent>
-        {showNewAttendanceForm && (
+        {showNewAttendanceForm && permissions.canCreate && (
           <Card className="mb-4 border-[#A2BD9D]">
             <CardContent className="p-4">
               <h3 className="font-semibold mb-4">Add New Attendance Day</h3>
@@ -358,7 +372,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
                   <TableHead>Class/Department</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Punch Times</TableHead>
-                  <TableHead>Actions</TableHead>
+                  {permissions.canDelete && <TableHead>Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -378,17 +392,19 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
                             <Badge variant="outline" className="text-xs">
                               {time}
                             </Badge>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => removePunchTime(record.id, index)}
-                              className="h-6 w-6 p-0"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                            {permissions.canDelete && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removePunchTime(record.id, index)}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
                         ))}
-                        {editingPunchTime?.attendanceId === record.id && (
+                        {editingPunchTime?.attendanceId === record.id && permissions.canEdit && (
                           <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 mt-2">
                             <Input
                               type="time"
@@ -415,25 +431,29 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
-                        <Button
-                          size="sm"
-                          onClick={() => setEditingPunchTime({ attendanceId: record.id })}
-                          className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => deleteAttendance(record.id)}
-                          className="w-full sm:w-auto"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    {permissions.canEdit && (
+                      <TableCell>
+                        <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
+                          <Button
+                            size="sm"
+                            onClick={() => setEditingPunchTime({ attendanceId: record.id })}
+                            className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                          {permissions.canDelete && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deleteAttendance(record.id)}
+                              className="w-full sm:w-auto"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

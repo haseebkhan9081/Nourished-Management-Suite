@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/lib/supabase"
+import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 
 interface BillingSectionProps {
   selectedSchoolId: number | null
@@ -27,6 +28,7 @@ interface GroupedBillingData {
 }
 
 export function BillingSection({ selectedSchoolId }: BillingSectionProps) {
+  const { permissions, loading: loadingPermissions } = useSchoolPermissions(selectedSchoolId)
   const [selectedMonth, setSelectedMonth] = useState("")
   const [groupedBillingData, setGroupedBillingData] = useState<GroupedBillingData>({})
   const [loading, setLoading] = useState(false)
@@ -110,6 +112,16 @@ export function BillingSection({ selectedSchoolId }: BillingSectionProps) {
       <Card>
         <CardContent className="p-8 text-center">
           <p className="text-gray-500">Please select a school to view billing data</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (loadingPermissions) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-gray-500">Loading permissions...</p>
         </CardContent>
       </Card>
     )

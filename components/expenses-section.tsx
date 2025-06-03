@@ -8,12 +8,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Trash2, Copy } from "lucide-react"
 import { supabase, type Expense } from "@/lib/supabase"
 import { useUser } from "@clerk/nextjs"
+import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 
 interface ExpensesSectionProps {
   selectedSchoolId: number | null
 }
 
 export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
+  const { permissions, loading: loadingPermissions } = useSchoolPermissions(selectedSchoolId)
   const { user } = useUser()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(false)
@@ -175,6 +177,16 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
     )
   }
 
+  if (loadingPermissions) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-gray-500">Loading permissions...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -201,15 +213,17 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
           <>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                <Button
-                  onClick={() => setShowAddExpenseForm(true)}
-                  className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Expense
-                </Button>
+                {permissions.canCreate && (
+                  <Button
+                    onClick={() => setShowAddExpenseForm(true)}
+                    className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Expense
+                  </Button>
+                )}
 
-                {previousMonths.length > 0 && (
+                {permissions.canCreate && previousMonths.length > 0 && (
                   <div className="relative w-full sm:w-auto">
                     <Button
                       variant="outline"
@@ -242,7 +256,7 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
               </div>
             </div>
 
-            {showAddExpenseForm && (
+            {showAddExpenseForm && permissions.canCreate && (
               <Card className="mb-6 border-[#A2BD9D]">
                 <CardContent className="p-4">
                   <h3 className="font-semibold mb-4">Add New Expense</h3>
@@ -290,9 +304,11 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
             ) : expenses.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-500">No expenses found for {formatMonthYear(selectedMonth)}</p>
-                <p className="text-sm text-gray-400 mt-2">
-                  Add expenses using the button above or copy from a previous month
-                </p>
+                {permissions.canCreate && (
+                  <p className="text-sm text-gray-400 mt-2">
+                    Add expenses using the button above or copy from a previous month
+                  </p>
+                )}
               </div>
             ) : (
               <>
@@ -302,7 +318,7 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
                       <TableRow>
                         <TableHead>Expense Name</TableHead>
                         <TableHead>Amount</TableHead>
-                        <TableHead>Actions</TableHead>
+                        {permissions.canDelete && <TableHead>Actions</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -310,11 +326,13 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
                         <TableRow key={expense.id}>
                           <TableCell className="font-medium">{expense.expense_name}</TableCell>
                           <TableCell>${Number(expense.amount).toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="destructive" onClick={() => deleteExpense(expense.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
+                          {permissions.canDelete && (
+                            <TableCell>
+                              <Button size="sm" variant="destructive" onClick={() => deleteExpense(expense.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
