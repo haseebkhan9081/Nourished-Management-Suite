@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SchoolSelector } from "./school-selector"
 import { MealDataSection } from "./meal-data-section"
 import { AttendanceDataSection } from "./attendance-data-section"
+import { BillingSection } from "./billing-section"
 
 export function Dashboard() {
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null)
@@ -17,12 +18,15 @@ export function Dashboard() {
       </div>
 
       <Tabs defaultValue="meals" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="meals" className="data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white">
             Meal Data
           </TabsTrigger>
           <TabsTrigger value="attendance" className="data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white">
             Attendance Data
+          </TabsTrigger>
+          <TabsTrigger value="billing" className="data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white">
+            Billing
           </TabsTrigger>
         </TabsList>
 
@@ -32,6 +36,10 @@ export function Dashboard() {
 
         <TabsContent value="attendance">
           <AttendanceDataSection selectedSchoolId={selectedSchoolId} />
+        </TabsContent>
+
+        <TabsContent value="billing">
+          <BillingSection selectedSchoolId={selectedSchoolId} />
         </TabsContent>
       </Tabs>
     </div>

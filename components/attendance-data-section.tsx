@@ -121,6 +121,25 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
     if (!selectedStudentId || !newAttendanceDate) return
 
     try {
+      // Check if attendance already exists for this student and date
+      const { data: existingAttendance, error: checkError } = await supabase
+        .from("attendance")
+        .select("id")
+        .eq("student_id", selectedStudentId)
+        .eq("date", newAttendanceDate)
+        .single()
+
+      if (checkError && checkError.code !== "PGRST116") {
+        throw checkError
+      }
+
+      if (existingAttendance) {
+        alert(
+          "An attendance entry already exists for this student on this date. Please choose a different date or student.",
+        )
+        return
+      }
+
       const { error } = await supabase.from("attendance").insert({
         student_id: selectedStudentId,
         date: newAttendanceDate,
@@ -135,6 +154,21 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
       fetchAttendance()
     } catch (error) {
       console.error("Error creating new attendance:", error)
+    }
+  }
+
+  const deleteAttendance = async (attendanceId: number) => {
+    if (!confirm("Are you sure you want to delete this attendance record?")) {
+      return
+    }
+
+    try {
+      const { error } = await supabase.from("attendance").delete().eq("id", attendanceId)
+
+      if (error) throw error
+      fetchAttendance()
+    } catch (error) {
+      console.error("Error deleting attendance:", error)
     }
   }
 
@@ -320,13 +354,18 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      size="sm"
-                      onClick={() => setEditingPunchTime({ attendanceId: record.id })}
-                      className="bg-[#A2BD9D] hover:bg-[#8FA889]"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        onClick={() => setEditingPunchTime({ attendanceId: record.id })}
+                        className="bg-[#A2BD9D] hover:bg-[#8FA889]"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => deleteAttendance(record.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

@@ -86,6 +86,23 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
     if (!selectedSchoolId || !newMealDate) return
 
     try {
+      // Check if meal already exists for this date
+      const { data: existingMeal, error: checkError } = await supabase
+        .from("meals")
+        .select("id")
+        .eq("school_id", selectedSchoolId)
+        .eq("date", newMealDate)
+        .single()
+
+      if (checkError && checkError.code !== "PGRST116") {
+        throw checkError
+      }
+
+      if (existingMeal) {
+        alert("A meal entry already exists for this date. Please choose a different date.")
+        return
+      }
+
       const date = new Date(newMealDate)
       const dayOfWeek = date.toLocaleDateString("en-US", { weekday: "long" })
 
@@ -108,6 +125,21 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
 
   const calculateMealTotal = (items: MealItem[]) => {
     return items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
+  }
+
+  const deleteMeal = async (mealId: number) => {
+    if (!confirm("Are you sure you want to delete this meal day? This will also delete all meal items.")) {
+      return
+    }
+
+    try {
+      const { error } = await supabase.from("meals").delete().eq("id", mealId)
+
+      if (error) throw error
+      fetchMeals()
+    } catch (error) {
+      console.error("Error deleting meal:", error)
+    }
   }
 
   if (!selectedSchoolId) {
@@ -181,6 +213,10 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
                   >
                     <Plus className="h-4 w-4 mr-1" />
                     Add Item
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={() => deleteMeal(meal.id)} className="ml-2">
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete Day
                   </Button>
                 </div>
 
