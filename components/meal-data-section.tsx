@@ -18,6 +18,8 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   const [loading, setLoading] = useState(false)
   const [editingItem, setEditingItem] = useState<{ mealId: number; itemId?: number } | null>(null)
   const [newItem, setNewItem] = useState({ item_name: "", unit_price: "", quantity: "" })
+  const [showNewMealForm, setShowNewMealForm] = useState(false)
+  const [newMealDate, setNewMealDate] = useState("")
 
   useEffect(() => {
     if (selectedSchoolId) {
@@ -80,6 +82,30 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
     }
   }
 
+  const createNewMeal = async () => {
+    if (!selectedSchoolId || !newMealDate) return
+
+    try {
+      const date = new Date(newMealDate)
+      const dayOfWeek = date.toLocaleDateString("en-US", { weekday: "long" })
+
+      const { error } = await supabase.from("meals").insert({
+        school_id: selectedSchoolId,
+        date: newMealDate,
+        day_of_week: dayOfWeek,
+        total_cost: 0,
+      })
+
+      if (error) throw error
+
+      setNewMealDate("")
+      setShowNewMealForm(false)
+      fetchMeals()
+    } catch (error) {
+      console.error("Error creating new meal:", error)
+    }
+  }
+
   const calculateMealTotal = (items: MealItem[]) => {
     return items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
   }
@@ -97,9 +123,42 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-[#A2BD9D]">Meal Data</CardTitle>
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-[#A2BD9D]">Meal Data</CardTitle>
+          <Button onClick={() => setShowNewMealForm(true)} className="bg-[#A2BD9D] hover:bg-[#8FA889]">
+            <Plus className="h-4 w-4 mr-2" />
+            Add New Day
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
+        {showNewMealForm && (
+          <Card className="mb-4 border-[#A2BD9D]">
+            <CardContent className="p-4">
+              <h3 className="font-semibold mb-4">Add New Meal Day</h3>
+              <div className="flex items-center space-x-4">
+                <Input
+                  type="date"
+                  value={newMealDate}
+                  onChange={(e) => setNewMealDate(e.target.value)}
+                  className="w-48"
+                />
+                <Button onClick={createNewMeal} className="bg-[#A2BD9D] hover:bg-[#8FA889]" disabled={!newMealDate}>
+                  Create Meal Day
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowNewMealForm(false)
+                    setNewMealDate("")
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         {loading ? (
           <div className="text-center py-8">Loading meals...</div>
         ) : (
