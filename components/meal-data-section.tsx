@@ -86,19 +86,16 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
     if (!selectedSchoolId || !newMealDate) return
 
     try {
-      // Check if meal already exists for this date
+      // Check if meal already exists for this date and school
       const { data: existingMeal, error: checkError } = await supabase
         .from("meals")
         .select("id")
         .eq("school_id", selectedSchoolId)
         .eq("date", newMealDate)
-        .single()
 
-      if (checkError && checkError.code !== "PGRST116") {
-        throw checkError
-      }
+      if (checkError) throw checkError
 
-      if (existingMeal) {
+      if (existingMeal && existingMeal.length > 0) {
         alert("A meal entry already exists for this date. Please choose a different date.")
         return
       }
