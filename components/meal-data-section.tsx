@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, X } from "lucide-react"
 import { supabase, type Meal, type MealItem } from "@/lib/supabase"
 
 interface MealDataSectionProps {
@@ -20,6 +20,12 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   const [newItem, setNewItem] = useState({ item_name: "", unit_price: "", quantity: "" })
   const [showNewMealForm, setShowNewMealForm] = useState(false)
   const [newMealDate, setNewMealDate] = useState("")
+
+  // Filter states
+  const [singleDateFilter, setSingleDateFilter] = useState("")
+  const [startDateFilter, setStartDateFilter] = useState("")
+  const [endDateFilter, setEndDateFilter] = useState("")
+  const [monthFilter, setMonthFilter] = useState("")
 
   useEffect(() => {
     if (selectedSchoolId) {
@@ -139,6 +145,35 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
     }
   }
 
+  const clearAllFilters = () => {
+    setSingleDateFilter("")
+    setStartDateFilter("")
+    setEndDateFilter("")
+    setMonthFilter("")
+  }
+
+  const filteredMeals = meals.filter((meal) => {
+    // Single date filter
+    if (singleDateFilter) {
+      return meal.date === singleDateFilter
+    }
+
+    // Date range filter
+    if (startDateFilter && endDateFilter) {
+      return meal.date >= startDateFilter && meal.date <= endDateFilter
+    }
+
+    // Month filter
+    if (monthFilter) {
+      const mealMonth = new Date(meal.date).toISOString().slice(0, 7)
+      return mealMonth === monthFilter
+    }
+
+    return true
+  })
+
+  const hasActiveFilters = singleDateFilter || startDateFilter || endDateFilter || monthFilter
+
   if (!selectedSchoolId) {
     return (
       <Card>
@@ -152,27 +187,101 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <CardTitle className="text-[#A2BD9D]">Meal Data</CardTitle>
-          <Button onClick={() => setShowNewMealForm(true)} className="bg-[#A2BD9D] hover:bg-[#8FA889]">
+          <Button onClick={() => setShowNewMealForm(true)} className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Add New Day
           </Button>
         </div>
+
+        {/* Filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Single Date:</label>
+            <Input
+              type="date"
+              value={singleDateFilter}
+              onChange={(e) => {
+                setSingleDateFilter(e.target.value)
+                setStartDateFilter("")
+                setEndDateFilter("")
+                setMonthFilter("")
+              }}
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Start Date:</label>
+            <Input
+              type="date"
+              value={startDateFilter}
+              onChange={(e) => {
+                setStartDateFilter(e.target.value)
+                setSingleDateFilter("")
+                setMonthFilter("")
+              }}
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">End Date:</label>
+            <Input
+              type="date"
+              value={endDateFilter}
+              onChange={(e) => {
+                setEndDateFilter(e.target.value)
+                setSingleDateFilter("")
+                setMonthFilter("")
+              }}
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Month/Year:</label>
+            <Input
+              type="month"
+              value={monthFilter}
+              onChange={(e) => {
+                setMonthFilter(e.target.value)
+                setSingleDateFilter("")
+                setStartDateFilter("")
+                setEndDateFilter("")
+              }}
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        {hasActiveFilters && (
+          <div className="flex justify-end mt-4">
+            <Button variant="outline" onClick={clearAllFilters} size="sm">
+              <X className="h-4 w-4 mr-2" />
+              Clear Filters
+            </Button>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {showNewMealForm && (
           <Card className="mb-4 border-[#A2BD9D]">
             <CardContent className="p-4">
               <h3 className="font-semibold mb-4">Add New Meal Day</h3>
-              <div className="flex items-center space-x-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
                 <Input
                   type="date"
                   value={newMealDate}
                   onChange={(e) => setNewMealDate(e.target.value)}
-                  className="w-48"
+                  className="w-full sm:w-48"
                 />
-                <Button onClick={createNewMeal} className="bg-[#A2BD9D] hover:bg-[#8FA889]" disabled={!newMealDate}>
+                <Button
+                  onClick={createNewMeal}
+                  className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                  disabled={!newMealDate}
+                >
                   Create Meal Day
                 </Button>
                 <Button
@@ -181,6 +290,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
                     setShowNewMealForm(false)
                     setNewMealDate("")
                   }}
+                  className="w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
@@ -192,9 +302,9 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
           <div className="text-center py-8">Loading meals...</div>
         ) : (
           <div className="space-y-4">
-            {meals.map((meal) => (
+            {filteredMeals.map((meal) => (
               <div key={meal.id} className="border rounded-lg p-4">
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
                   <div>
                     <h3 className="font-semibold">
                       {new Date(meal.date).toLocaleDateString()} - {meal.day_of_week}
@@ -203,94 +313,108 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
                       Total: ${calculateMealTotal(meal.meal_items).toFixed(2)}
                     </Badge>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={() => setEditingItem({ mealId: meal.id })}
-                    className="bg-[#A2BD9D] hover:bg-[#8FA889]"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Item
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => deleteMeal(meal.id)} className="ml-2">
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete Day
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <Button
+                      size="sm"
+                      onClick={() => setEditingItem({ mealId: meal.id })}
+                      className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Item
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => deleteMeal(meal.id)}
+                      className="w-full sm:w-auto"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete Day
+                    </Button>
+                  </div>
                 </div>
 
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Item Name</TableHead>
-                      <TableHead>Unit Price</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {meal.meal_items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.item_name}</TableCell>
-                        <TableCell>${item.unit_price.toFixed(2)}</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>${(item.unit_price * item.quantity).toFixed(2)}</TableCell>
-                        <TableCell>
-                          <Button size="sm" variant="destructive" onClick={() => deleteMealItem(item.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {editingItem?.mealId === meal.id && (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell>
-                          <Input
-                            placeholder="Item name"
-                            value={newItem.item_name}
-                            onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={newItem.unit_price}
-                            onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            placeholder="0"
-                            value={newItem.quantity}
-                            onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          $
-                          {(
-                            Number.parseFloat(newItem.unit_price || "0") * Number.parseInt(newItem.quantity || "0")
-                          ).toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              onClick={() => addMealItem(meal.id)}
-                              className="bg-[#A2BD9D] hover:bg-[#8FA889]"
-                            >
-                              Save
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => setEditingItem(null)}>
-                              Cancel
-                            </Button>
-                          </div>
-                        </TableCell>
+                        <TableHead>Item Name</TableHead>
+                        <TableHead>Unit Price</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {meal.meal_items.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.item_name}</TableCell>
+                          <TableCell>${item.unit_price.toFixed(2)}</TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>${(item.unit_price * item.quantity).toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="destructive" onClick={() => deleteMealItem(item.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {editingItem?.mealId === meal.id && (
+                        <TableRow>
+                          <TableCell>
+                            <Input
+                              placeholder="Item name"
+                              value={newItem.item_name}
+                              onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={newItem.unit_price}
+                              onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              value={newItem.quantity}
+                              onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            $
+                            {(
+                              Number.parseFloat(newItem.unit_price || "0") * Number.parseInt(newItem.quantity || "0")
+                            ).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
+                              <Button
+                                size="sm"
+                                onClick={() => addMealItem(meal.id)}
+                                className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditingItem(null)}
+                                className="w-full sm:w-auto"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             ))}
           </div>

@@ -23,12 +23,12 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
 
   if (!isSignedIn) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <Card className="w-full max-w-md">
-          <CardContent className="p-8 text-center">
+          <CardContent className="p-6 sm:p-8 text-center">
             <div className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">School Management System</h1>
-              <p className="text-gray-600">Sign in to access your dashboard</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Nourished Management Suite</h1>
+              <p className="text-sm sm:text-base text-gray-600">Sign in to access your dashboard</p>
             </div>
             <SignInButton mode="modal" forceRedirectUrl="/" signUpForceRedirectUrl="/">
               <Button className="w-full bg-[#A2BD9D] hover:bg-[#8FA889] text-white" size="lg">
@@ -45,12 +45,12 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-14 sm:h-16">
             <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">School Management System</h1>
+              <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Nourished Management Suite</h1>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <span className="hidden sm:block text-sm text-gray-600">
                 Welcome, {user?.firstName || user?.emailAddresses?.[0]?.emailAddress}
               </span>
               <UserButton
@@ -65,7 +65,7 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
           </div>
         </div>
       </header>
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</main>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">{children}</main>
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { supabase } from "@/lib/supabase"
 
@@ -94,26 +94,6 @@ export function BillingSection({ selectedSchoolId }: BillingSectionProps) {
     }
   }
 
-  // Generate month options for the current year and next year
-  const generateMonthOptions = () => {
-    const options = []
-    const currentYear = new Date().getFullYear()
-
-    for (let year = currentYear; year <= currentYear + 1; year++) {
-      for (let month = 1; month <= 12; month++) {
-        const monthStr = month.toString().padStart(2, "0")
-        const value = `${year}-${monthStr}`
-        const label = new Date(year, month - 1).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-        })
-        options.push({ value, label })
-      }
-    }
-
-    return options
-  }
-
   if (!selectedSchoolId) {
     return (
       <Card>
@@ -127,22 +107,17 @@ export function BillingSection({ selectedSchoolId }: BillingSectionProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <CardTitle className="text-[#A2BD9D]">Monthly Billing</CardTitle>
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium">Select Month:</label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-48 border-[#A2BD9D] focus:ring-[#A2BD9D]">
-                <SelectValue placeholder="Select month..." />
-              </SelectTrigger>
-              <SelectContent>
-                {generateMonthOptions().map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
+            <label className="text-sm font-medium whitespace-nowrap">Select Month/Year:</label>
+            <Input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full sm:w-48 border-[#A2BD9D] focus:ring-[#A2BD9D]"
+              placeholder="Select month..."
+            />
           </div>
         </div>
       </CardHeader>
@@ -159,30 +134,34 @@ export function BillingSection({ selectedSchoolId }: BillingSectionProps) {
           </div>
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Item Name</TableHead>
-                  <TableHead>Unit Price</TableHead>
-                  <TableHead>Total Quantity</TableHead>
-                  <TableHead>Total Cost</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {billingData.map((item, index) => (
-                  <TableRow key={index}>
-                    <TableCell className="font-medium">{item.item_name}</TableCell>
-                    <TableCell>${item.unit_price.toFixed(2)}</TableCell>
-                    <TableCell>{item.total_quantity}</TableCell>
-                    <TableCell>${item.total_cost.toFixed(2)}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item Name</TableHead>
+                    <TableHead>Unit Price</TableHead>
+                    <TableHead>Total Quantity</TableHead>
+                    <TableHead>Total Cost</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {billingData.map((item, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{item.item_name}</TableCell>
+                      <TableCell>${item.unit_price.toFixed(2)}</TableCell>
+                      <TableCell>{item.total_quantity}</TableCell>
+                      <TableCell>${item.total_cost.toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
             <div className="mt-6 flex justify-end">
-              <div className="bg-[#A2BD9D] text-white p-4 rounded-lg">
-                <div className="text-lg font-semibold">Monthly Total: ${totalAmount.toFixed(2)}</div>
-                <div className="text-sm opacity-90">
+              <div className="bg-[#A2BD9D] text-white p-4 rounded-lg w-full sm:w-auto">
+                <div className="text-lg font-semibold text-center sm:text-left">
+                  Monthly Total: ${totalAmount.toFixed(2)}
+                </div>
+                <div className="text-sm opacity-90 text-center sm:text-left">
                   {new Date(selectedMonth + "-01").toLocaleDateString("en-US", {
                     year: "numeric",
                     month: "long",

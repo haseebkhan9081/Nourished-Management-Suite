@@ -7,9 +7,9 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "School Management System",
-  description: "Manage meals and attendance for schools",
-    generator: 'v0.dev'
+  title: "Nourished Management Suite",
+  description: "Comprehensive school meal and attendance management system",
+  generator: "v0.dev",
 }
 
 export default function RootLayout({

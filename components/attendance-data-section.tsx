@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, X } from "lucide-react"
 import { supabase, type Attendance, type Student } from "@/lib/supabase"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -23,7 +23,11 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
   const [newAttendanceDate, setNewAttendanceDate] = useState("")
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null)
   const [students, setStudents] = useState<Student[]>([])
-  const [dateFilter, setDateFilter] = useState("")
+
+  // Filter states
+  const [singleDateFilter, setSingleDateFilter] = useState("")
+  const [startDateFilter, setStartDateFilter] = useState("")
+  const [endDateFilter, setEndDateFilter] = useState("")
   const [monthFilter, setMonthFilter] = useState("")
 
   useEffect(() => {
@@ -127,13 +131,10 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
         .select("id")
         .eq("student_id", selectedStudentId)
         .eq("date", newAttendanceDate)
-        .single()
 
-      if (checkError && checkError.code !== "PGRST116") {
-        throw checkError
-      }
+      if (checkError) throw checkError
 
-      if (existingAttendance) {
+      if (existingAttendance && existingAttendance.length > 0) {
         alert(
           "An attendance entry already exists for this student on this date. Please choose a different date or student.",
         )
@@ -172,16 +173,34 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
     }
   }
 
+  const clearAllFilters = () => {
+    setSingleDateFilter("")
+    setStartDateFilter("")
+    setEndDateFilter("")
+    setMonthFilter("")
+  }
+
   const filteredAttendance = attendance.filter((record) => {
-    if (dateFilter) {
-      return record.date === dateFilter
+    // Single date filter
+    if (singleDateFilter) {
+      return record.date === singleDateFilter
     }
+
+    // Date range filter
+    if (startDateFilter && endDateFilter) {
+      return record.date >= startDateFilter && record.date <= endDateFilter
+    }
+
+    // Month filter
     if (monthFilter) {
       const recordMonth = new Date(record.date).toISOString().slice(0, 7)
       return recordMonth === monthFilter
     }
+
     return true
   })
+
+  const hasActiveFilters = singleDateFilter || startDateFilter || endDateFilter || monthFilter
 
   if (!selectedSchoolId) {
     return (
@@ -196,62 +215,98 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
   return (
     <Card>
       <CardHeader>
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <CardTitle className="text-[#A2BD9D]">Attendance Data</CardTitle>
-          <Button onClick={() => setShowNewAttendanceForm(true)} className="bg-[#A2BD9D] hover:bg-[#8FA889]">
+          <Button
+            onClick={() => setShowNewAttendanceForm(true)}
+            className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+          >
             <Plus className="h-4 w-4 mr-2" />
             Add New Day
           </Button>
         </div>
-        <div className="flex space-x-4">
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium">Filter by Date:</label>
+
+        {/* Filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Single Date:</label>
             <Input
               type="date"
-              value={dateFilter}
+              value={singleDateFilter}
               onChange={(e) => {
-                setDateFilter(e.target.value)
+                setSingleDateFilter(e.target.value)
+                setStartDateFilter("")
+                setEndDateFilter("")
                 setMonthFilter("")
               }}
-              className="w-40"
+              className="w-full"
             />
           </div>
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium">Filter by Month:</label>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Start Date:</label>
+            <Input
+              type="date"
+              value={startDateFilter}
+              onChange={(e) => {
+                setStartDateFilter(e.target.value)
+                setSingleDateFilter("")
+                setMonthFilter("")
+              }}
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">End Date:</label>
+            <Input
+              type="date"
+              value={endDateFilter}
+              onChange={(e) => {
+                setEndDateFilter(e.target.value)
+                setSingleDateFilter("")
+                setMonthFilter("")
+              }}
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Month/Year:</label>
             <Input
               type="month"
               value={monthFilter}
               onChange={(e) => {
                 setMonthFilter(e.target.value)
-                setDateFilter("")
+                setSingleDateFilter("")
+                setStartDateFilter("")
+                setEndDateFilter("")
               }}
-              className="w-40"
+              className="w-full"
             />
           </div>
-          {(dateFilter || monthFilter) && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDateFilter("")
-                setMonthFilter("")
-              }}
-            >
+        </div>
+
+        {hasActiveFilters && (
+          <div className="flex justify-end mt-4">
+            <Button variant="outline" onClick={clearAllFilters} size="sm">
+              <X className="h-4 w-4 mr-2" />
               Clear Filters
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {showNewAttendanceForm && (
           <Card className="mb-4 border-[#A2BD9D]">
             <CardContent className="p-4">
               <h3 className="font-semibold mb-4">Add New Attendance Day</h3>
-              <div className="flex items-center space-x-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Select
                   value={selectedStudentId?.toString() || ""}
                   onValueChange={(value) => setSelectedStudentId(Number.parseInt(value))}
                 >
-                  <SelectTrigger className="w-48">
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select student..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -266,11 +321,11 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
                   type="date"
                   value={newAttendanceDate}
                   onChange={(e) => setNewAttendanceDate(e.target.value)}
-                  className="w-48"
+                  className="w-full"
                 />
                 <Button
                   onClick={createNewAttendance}
-                  className="bg-[#A2BD9D] hover:bg-[#8FA889]"
+                  className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full"
                   disabled={!selectedStudentId || !newAttendanceDate}
                 >
                   Create Attendance
@@ -282,6 +337,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
                     setNewAttendanceDate("")
                     setSelectedStudentId(null)
                   }}
+                  className="w-full"
                 >
                   Cancel
                 </Button>
@@ -292,85 +348,97 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
         {loading ? (
           <div className="text-center py-8">Loading attendance...</div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student ID</TableHead>
-                <TableHead>System ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Class/Department</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Punch Times</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredAttendance.map((record) => (
-                <TableRow key={record.id}>
-                  <TableCell>{record.students.student_id}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{record.students.system_id}</Badge>
-                  </TableCell>
-                  <TableCell className="font-medium">{record.students.name}</TableCell>
-                  <TableCell>{record.students.class_department}</TableCell>
-                  <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      {record.punch_times.map((time, index) => (
-                        <div key={index} className="flex items-center space-x-2">
-                          <Badge variant="outline" className="text-xs">
-                            {time}
-                          </Badge>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removePunchTime(record.id, index)}
-                            className="h-6 w-6 p-0"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
-                      {editingPunchTime?.attendanceId === record.id && (
-                        <div className="flex items-center space-x-2 mt-2">
-                          <Input
-                            type="time"
-                            value={newPunchTime}
-                            onChange={(e) => setNewPunchTime(e.target.value)}
-                            className="w-32"
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => addPunchTime(record.id)}
-                            className="bg-[#A2BD9D] hover:bg-[#8FA889]"
-                          >
-                            Add
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setEditingPunchTime(null)}>
-                            Cancel
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Button
-                        size="sm"
-                        onClick={() => setEditingPunchTime({ attendanceId: record.id })}
-                        className="bg-[#A2BD9D] hover:bg-[#8FA889]"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="destructive" onClick={() => deleteAttendance(record.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Student ID</TableHead>
+                  <TableHead>System ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Class/Department</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Punch Times</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredAttendance.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell>{record.students.student_id}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{record.students.system_id}</Badge>
+                    </TableCell>
+                    <TableCell className="font-medium">{record.students.name}</TableCell>
+                    <TableCell>{record.students.class_department}</TableCell>
+                    <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {record.punch_times.map((time, index) => (
+                          <div key={index} className="flex items-center space-x-2">
+                            <Badge variant="outline" className="text-xs">
+                              {time}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => removePunchTime(record.id, index)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                        {editingPunchTime?.attendanceId === record.id && (
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 mt-2">
+                            <Input
+                              type="time"
+                              value={newPunchTime}
+                              onChange={(e) => setNewPunchTime(e.target.value)}
+                              className="w-full sm:w-32"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => addPunchTime(record.id)}
+                              className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                            >
+                              Add
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEditingPunchTime(null)}
+                              className="w-full sm:w-auto"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
+                        <Button
+                          size="sm"
+                          onClick={() => setEditingPunchTime({ attendanceId: record.id })}
+                          className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => deleteAttendance(record.id)}
+                          className="w-full sm:w-auto"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
     </Card>
