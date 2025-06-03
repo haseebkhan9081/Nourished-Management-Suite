@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/lib/supabase"
 
 interface BillingSectionProps {
@@ -13,14 +14,21 @@ interface BillingSectionProps {
 interface BillingItem {
   item_name: string
   unit_price: number
-  total_quantity: number
+  quantity: number
   total_cost: number
-  meal_date: string
+  date: string
+}
+
+interface GroupedBillingData {
+  [date: string]: {
+    items: BillingItem[]
+    subtotal: number
+  }
 }
 
 export function BillingSection({ selectedSchoolId }: BillingSectionProps) {
   const [selectedMonth, setSelectedMonth] = useState("")
-  const [billingData, setBillingData] = useState<BillingItem[]>([])
+  const [groupedBillingData, setGroupedBillingData] = useState<GroupedBillingData>({})
   const [loading, setLoading] = useState(false)
   const [totalAmount, setTotalAmount] = useState(0)
 
@@ -59,33 +67,36 @@ export function BillingSection({ selectedSchoolId }: BillingSectionProps) {
 
       if (error) throw error
 
-      // Process the data to create billing items
-      const itemMap = new Map<string, BillingItem>()
+      // Group data by date
+      const grouped: GroupedBillingData = {}
       let total = 0
 
       data?.forEach((meal) => {
+        const mealDate = meal.date
+        if (!grouped[mealDate]) {
+          grouped[mealDate] = {
+            items: [],
+            subtotal: 0,
+          }
+        }
+
         meal.meal_items?.forEach((item) => {
-          const key = `${item.item_name}-${item.unit_price}`
           const itemTotal = item.unit_price * item.quantity
           total += itemTotal
 
-          if (itemMap.has(key)) {
-            const existing = itemMap.get(key)!
-            existing.total_quantity += item.quantity
-            existing.total_cost += itemTotal
-          } else {
-            itemMap.set(key, {
-              item_name: item.item_name,
-              unit_price: item.unit_price,
-              total_quantity: item.quantity,
-              total_cost: itemTotal,
-              meal_date: meal.date,
-            })
-          }
+          grouped[mealDate].items.push({
+            item_name: item.item_name,
+            unit_price: item.unit_price,
+            quantity: item.quantity,
+            total_cost: itemTotal,
+            date: mealDate,
+          })
+
+          grouped[mealDate].subtotal += itemTotal
         })
       })
 
-      setBillingData(Array.from(itemMap.values()))
+      setGroupedBillingData(grouped)
       setTotalAmount(total)
     } catch (error) {
       console.error("Error fetching billing data:", error)
@@ -128,33 +139,54 @@ export function BillingSection({ selectedSchoolId }: BillingSectionProps) {
           </div>
         ) : loading ? (
           <div className="text-center py-8">Loading billing data...</div>
-        ) : billingData.length === 0 ? (
+        ) : Object.keys(groupedBillingData).length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-500">No meal data found for the selected month</p>
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Item Name</TableHead>
-                    <TableHead>Unit Price</TableHead>
-                    <TableHead>Total Quantity</TableHead>
-                    <TableHead>Total Cost</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {billingData.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">{item.item_name}</TableCell>
-                      <TableCell>${item.unit_price.toFixed(2)}</TableCell>
-                      <TableCell>{item.total_quantity}</TableCell>
-                      <TableCell>${item.total_cost.toFixed(2)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="space-y-6">
+              {Object.entries(groupedBillingData)
+                .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+                .map(([date, data]) => (
+                  <div key={date} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold">
+                        {new Date(date).toLocaleDateString("en-US", {
+                          weekday: "long",
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </h3>
+                      <Badge variant="outline" className="text-sm">
+                        Subtotal: ${data.subtotal.toFixed(2)}
+                      </Badge>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Item Name</TableHead>
+                            <TableHead>Unit Price</TableHead>
+                            <TableHead>Quantity</TableHead>
+                            <TableHead>Total Cost</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {data.items.map((item, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium">{item.item_name}</TableCell>
+                              <TableCell>${item.unit_price.toFixed(2)}</TableCell>
+                              <TableCell>{item.quantity}</TableCell>
+                              <TableCell>${item.total_cost.toFixed(2)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ))}
             </div>
             <div className="mt-6 flex justify-end">
               <div className="bg-[#A2BD9D] text-white p-4 rounded-lg w-full sm:w-auto">

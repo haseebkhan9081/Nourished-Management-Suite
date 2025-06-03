@@ -55,3 +55,22 @@ export interface Attendance {
   updated_at: string
   students?: Student
 }
+
+export interface Expense {
+  id: number
+  school_id: number
+  month_year: string
+  expense_name: string
+  amount: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SchoolAccess {
+  id: number
+  school_id: number
+  user_id: string
+  role: string
+  created_at: string
+  updated_at: string
+}

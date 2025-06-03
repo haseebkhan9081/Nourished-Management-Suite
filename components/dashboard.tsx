@@ -6,6 +6,8 @@ import { SchoolSelector } from "./school-selector"
 import { MealDataSection } from "./meal-data-section"
 import { AttendanceDataSection } from "./attendance-data-section"
 import { BillingSection } from "./billing-section"
+import { ExpensesSection } from "./expenses-section"
+import { SchoolManagementSection } from "./school-management-section"
 
 export function Dashboard() {
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null)
@@ -20,12 +22,12 @@ export function Dashboard() {
       </div>
 
       <Tabs defaultValue="meals" className="space-y-4 sm:space-y-6">
-        <TabsList className="grid w-full grid-cols-3 h-auto">
+        <TabsList className="grid w-full grid-cols-5 h-auto">
           <TabsTrigger
             value="meals"
             className="data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white text-xs sm:text-sm p-2 sm:p-3"
           >
-            Meal Data
+            Meals
           </TabsTrigger>
           <TabsTrigger
             value="attendance"
@@ -39,6 +41,18 @@ export function Dashboard() {
           >
             Billing
           </TabsTrigger>
+          <TabsTrigger
+            value="expenses"
+            className="data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white text-xs sm:text-sm p-2 sm:p-3"
+          >
+            Expenses
+          </TabsTrigger>
+          <TabsTrigger
+            value="schools"
+            className="data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white text-xs sm:text-sm p-2 sm:p-3"
+          >
+            Schools
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="meals">
@@ -51,6 +65,14 @@ export function Dashboard() {
 
         <TabsContent value="billing">
           <BillingSection selectedSchoolId={selectedSchoolId} />
+        </TabsContent>
+
+        <TabsContent value="expenses">
+          <ExpensesSection selectedSchoolId={selectedSchoolId} />
+        </TabsContent>
+
+        <TabsContent value="schools">
+          <SchoolManagementSection />
         </TabsContent>
       </Tabs>
     </div>

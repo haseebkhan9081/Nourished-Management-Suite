@@ -1,0 +1,341 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { Plus, Trash2, Users } from "lucide-react"
+import { supabase, type School, type SchoolAccess } from "@/lib/supabase"
+import { useUser } from "@clerk/nextjs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+export function SchoolManagementSection() {
+  const { user } = useUser()
+  const [schools, setSchools] = useState<School[]>([])
+  const [loading, setLoading] = useState(false)
+  const [showCreateSchoolForm, setShowCreateSchoolForm] = useState(false)
+  const [newSchool, setNewSchool] = useState({ name: "", address: "" })
+  const [showAccessForm, setShowAccessForm] = useState<number | null>(null)
+  const [newAccess, setNewAccess] = useState({ user_id: "", role: "viewer" })
+  const [schoolAccess, setSchoolAccess] = useState<{ [schoolId: number]: SchoolAccess[] }>({})
+
+  useEffect(() => {
+    if (user) {
+      fetchUserSchools()
+    }
+  }, [user])
+
+  const fetchUserSchools = async () => {
+    if (!user?.id) return
+
+    setLoading(true)
+    try {
+      // Fetch schools that the user has access to
+      const { data: accessData, error: accessError } = await supabase
+        .from("school_access")
+        .select(`
+          school_id,
+          role,
+          schools (*)
+        `)
+        .eq("user_id", user.id)
+
+      if (accessError) throw accessError
+
+      const userSchools = accessData?.map((access: any) => access.schools).filter(Boolean) || []
+      setSchools(userSchools)
+
+      // Fetch all access records for these schools
+      const schoolIds = userSchools.map((school: School) => school.id)
+      if (schoolIds.length > 0) {
+        const { data: allAccessData, error: allAccessError } = await supabase
+          .from("school_access")
+          .select("*")
+          .in("school_id", schoolIds)
+
+        if (allAccessError) throw allAccessError
+
+        // Group access by school_id
+        const accessBySchool: { [schoolId: number]: SchoolAccess[] } = {}
+        allAccessData?.forEach((access) => {
+          if (!accessBySchool[access.school_id]) {
+            accessBySchool[access.school_id] = []
+          }
+          accessBySchool[access.school_id].push(access)
+        })
+        setSchoolAccess(accessBySchool)
+      }
+    } catch (error) {
+      console.error("Error fetching user schools:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const createSchool = async () => {
+    if (!user?.id || !newSchool.name) return
+
+    try {
+      // Create the school
+      const { data: schoolData, error: schoolError } = await supabase
+        .from("schools")
+        .insert({
+          name: newSchool.name,
+          address: newSchool.address,
+        })
+        .select()
+        .single()
+
+      if (schoolError) throw schoolError
+
+      // Grant admin access to the creator
+      const { error: accessError } = await supabase.from("school_access").insert({
+        school_id: schoolData.id,
+        user_id: user.id,
+        role: "admin",
+      })
+
+      if (accessError) throw accessError
+
+      setNewSchool({ name: "", address: "" })
+      setShowCreateSchoolForm(false)
+      fetchUserSchools()
+    } catch (error) {
+      console.error("Error creating school:", error)
+      alert("Failed to create school. Please try again.")
+    }
+  }
+
+  const addUserAccess = async (schoolId: number) => {
+    if (!newAccess.user_id || !newAccess.role) return
+
+    try {
+      const { error } = await supabase.from("school_access").insert({
+        school_id: schoolId,
+        user_id: newAccess.user_id,
+        role: newAccess.role,
+      })
+
+      if (error) throw error
+
+      setNewAccess({ user_id: "", role: "viewer" })
+      setShowAccessForm(null)
+      fetchUserSchools()
+    } catch (error) {
+      console.error("Error adding user access:", error)
+      alert("Failed to add user access. Please check the user ID and try again.")
+    }
+  }
+
+  const removeUserAccess = async (accessId: number) => {
+    if (!confirm("Are you sure you want to remove this user's access?")) {
+      return
+    }
+
+    try {
+      const { error } = await supabase.from("school_access").delete().eq("id", accessId)
+
+      if (error) throw error
+      fetchUserSchools()
+    } catch (error) {
+      console.error("Error removing user access:", error)
+    }
+  }
+
+  const getUserRole = (schoolId: number) => {
+    const access = schoolAccess[schoolId]?.find((a) => a.user_id === user?.id)
+    return access?.role || "viewer"
+  }
+
+  const canManageAccess = (schoolId: number) => {
+    return getUserRole(schoolId) === "admin"
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <CardTitle className="text-[#A2BD9D]">School Management</CardTitle>
+          <Button
+            onClick={() => setShowCreateSchoolForm(true)}
+            className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create New School
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {showCreateSchoolForm && (
+          <Card className="mb-6 border-[#A2BD9D]">
+            <CardContent className="p-4">
+              <h3 className="font-semibold mb-4">Create New School</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  placeholder="School name"
+                  value={newSchool.name}
+                  onChange={(e) => setNewSchool({ ...newSchool, name: e.target.value })}
+                  className="w-full"
+                />
+                <Input
+                  placeholder="Address"
+                  value={newSchool.address}
+                  onChange={(e) => setNewSchool({ ...newSchool, address: e.target.value })}
+                  className="w-full"
+                />
+              </div>
+              <div className="flex space-x-2 mt-4">
+                <Button
+                  onClick={createSchool}
+                  className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                  disabled={!newSchool.name}
+                >
+                  Create School
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCreateSchoolForm(false)
+                    setNewSchool({ name: "", address: "" })
+                  }}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {loading ? (
+          <div className="text-center py-8">Loading schools...</div>
+        ) : schools.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No schools found</p>
+            <p className="text-sm text-gray-400 mt-2">Create a new school to get started</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {schools.map((school) => (
+              <Card key={school.id} className="border">
+                <CardContent className="p-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">{school.name}</h3>
+                      <p className="text-gray-600">{school.address}</p>
+                      <Badge variant="outline" className="mt-1">
+                        Your Role: {getUserRole(school.id)}
+                      </Badge>
+                    </div>
+                    {canManageAccess(school.id) && (
+                      <Button
+                        size="sm"
+                        onClick={() => setShowAccessForm(school.id)}
+                        className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                      >
+                        <Users className="h-4 w-4 mr-2" />
+                        Manage Access
+                      </Button>
+                    )}
+                  </div>
+
+                  {showAccessForm === school.id && (
+                    <Card className="mb-4 border-[#A2BD9D]">
+                      <CardContent className="p-4">
+                        <h4 className="font-semibold mb-4">Add User Access</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <Input
+                            placeholder="User ID (from Clerk)"
+                            value={newAccess.user_id}
+                            onChange={(e) => setNewAccess({ ...newAccess, user_id: e.target.value })}
+                            className="w-full"
+                          />
+                          <Select
+                            value={newAccess.role}
+                            onValueChange={(value) => setNewAccess({ ...newAccess, role: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="editor">Editor</SelectItem>
+                              <SelectItem value="viewer">Viewer</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <div className="flex space-x-2">
+                            <Button
+                              onClick={() => addUserAccess(school.id)}
+                              className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                              disabled={!newAccess.user_id}
+                            >
+                              Add
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setShowAccessForm(null)
+                                setNewAccess({ user_id: "", role: "viewer" })
+                              }}
+                              className="w-full sm:w-auto"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {schoolAccess[school.id] && schoolAccess[school.id].length > 0 && (
+                    <div>
+                      <h4 className="font-semibold mb-2">User Access</h4>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>User ID</TableHead>
+                              <TableHead>Role</TableHead>
+                              {canManageAccess(school.id) && <TableHead>Actions</TableHead>}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {schoolAccess[school.id].map((access) => (
+                              <TableRow key={access.id}>
+                                <TableCell className="font-mono text-sm">{access.user_id}</TableCell>
+                                <TableCell>
+                                  <Badge variant={access.role === "admin" ? "default" : "secondary"}>
+                                    {access.role}
+                                  </Badge>
+                                </TableCell>
+                                {canManageAccess(school.id) && (
+                                  <TableCell>
+                                    {access.user_id !== user?.id && (
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => removeUserAccess(access.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </TableCell>
+                                )}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
