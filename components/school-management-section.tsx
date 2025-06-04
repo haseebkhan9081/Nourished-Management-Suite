@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -7,11 +6,10 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2, Users, UserPlus } from "lucide-react"
-import { supabase, type School, type SchoolAccess } from "@/lib/supabase"
+import type { School, SchoolAccess } from "@/lib/supabase"
 import { useUser } from "@clerk/nextjs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { getClerkUsers } from "@/app/actions/clerk-actions"
 import type { Role } from "@/lib/permissions"
 
 interface ClerkUserInfo {
@@ -45,8 +43,10 @@ export function SchoolManagementSection() {
   const fetchClerkUsers = async () => {
     setLoadingUsers(true)
     try {
-      const users = await getClerkUsers()
-      setClerkUsers(users)
+      const res = await fetch("/api/clerk-users")
+      if (!res.ok) throw new Error("Failed to fetch")
+      const users = await res.json()
+      setClerkUsers(users?.users)
     } catch (error) {
       console.error("Error fetching Clerk users:", error)
     } finally {
@@ -59,41 +59,25 @@ export function SchoolManagementSection() {
 
     setLoading(true)
     try {
-      // Fetch schools that the user has access to
-      const { data: accessData, error: accessError } = await supabase
-        .from("school_access")
-        .select(`
-          school_id,
-          role,
-          schools (*)
-        `)
-        .eq("user_id", user.id)
+      const res = await fetch(`/api/schools?user_id=${user.id}`)
+      if (!res.ok) throw new Error("Failed to fetch user schools")
 
-      if (accessError) throw accessError
+      const { accessData, allAccessData } = await res.json()
 
-      const userSchools = accessData?.map((access: any) => access.schools).filter(Boolean) || []
+      const userSchools = accessData.map((access: any) => access.school).filter(Boolean) || []
+
       setSchools(userSchools)
 
-      // Fetch all access records for these schools
-      const schoolIds = userSchools.map((school: School) => school.id)
-      if (schoolIds.length > 0) {
-        const { data: allAccessData, error: allAccessError } = await supabase
-          .from("school_access")
-          .select("*")
-          .in("school_id", schoolIds)
+      // Group access by school_id
+      const accessBySchool: { [schoolId: number]: SchoolAccess[] } = {}
+      allAccessData.forEach((access: any) => {
+        if (!accessBySchool[access.school_id]) {
+          accessBySchool[access.school_id] = []
+        }
+        accessBySchool[access.school_id].push(access)
+      })
 
-        if (allAccessError) throw allAccessError
-
-        // Group access by school_id
-        const accessBySchool: { [schoolId: number]: SchoolAccess[] } = {}
-        allAccessData?.forEach((access) => {
-          if (!accessBySchool[access.school_id]) {
-            accessBySchool[access.school_id] = []
-          }
-          accessBySchool[access.school_id].push(access)
-        })
-        setSchoolAccess(accessBySchool)
-      }
+      setSchoolAccess(accessBySchool)
     } catch (error) {
       console.error("Error fetching user schools:", error)
     } finally {
@@ -105,26 +89,19 @@ export function SchoolManagementSection() {
     if (!user?.id || !newSchool.name) return
 
     try {
-      // Create the school
-      const { data: schoolData, error: schoolError } = await supabase
-        .from("schools")
-        .insert({
+      const res = await fetch("/api/schools/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           name: newSchool.name,
           address: newSchool.address,
-        })
-        .select()
-        .single()
-
-      if (schoolError) throw schoolError
-
-      // Grant admin access to the creator
-      const { error: accessError } = await supabase.from("school_access").insert({
-        school_id: schoolData.id,
-        user_id: user.id,
-        role: "admin",
+          user_id: user.id,
+        }),
       })
 
-      if (accessError) throw accessError
+      if (!res.ok) throw new Error("Failed to create school")
 
       setNewSchool({ name: "", address: "" })
       setShowCreateSchoolForm(false)
@@ -139,13 +116,19 @@ export function SchoolManagementSection() {
     if (!newAccess.user_id || !newAccess.role) return
 
     try {
-      const { error } = await supabase.from("school_access").insert({
-        school_id: schoolId,
-        user_id: newAccess.user_id,
-        role: newAccess.role,
+      const res = await fetch("/api/access/add", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          school_id: schoolId,
+          user_id: newAccess.user_id,
+          role: newAccess.role,
+        }),
       })
 
-      if (error) throw error
+      if (!res.ok) throw new Error("Request failed")
 
       setNewAccess({ user_id: "", role: "viewer" })
       setShowAccessForm(null)
@@ -162,12 +145,40 @@ export function SchoolManagementSection() {
     }
 
     try {
-      const { error } = await supabase.from("school_access").delete().eq("id", accessId)
+      const res = await fetch(`/api/access/remove?id=${accessId}`, {
+        method: "DELETE",
+      })
 
-      if (error) throw error
+      if (!res.ok) throw new Error("Request failed")
+
       fetchUserSchools()
     } catch (error) {
       console.error("Error removing user access:", error)
+      alert("Failed to remove user access. Please try again.")
+    }
+  }
+
+  const deleteSchool = async (schoolId: number, schoolName: string) => {
+    if (
+      !confirm(
+        `Are you sure you want to delete "${schoolName}"? This action cannot be undone and will remove all associated data.`,
+      )
+    ) {
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/schools/delete?id=${schoolId}`, {
+        method: "DELETE",
+      })
+
+      if (!res.ok) throw new Error("Failed to delete school")
+
+      fetchUserSchools()
+      alert("School deleted successfully")
+    } catch (error) {
+      console.error("Error deleting school:", error)
+      alert("Failed to delete school. Please try again.")
     }
   }
 
@@ -181,7 +192,7 @@ export function SchoolManagementSection() {
   }
 
   const getUserDisplayName = (userId: string) => {
-    const userInfo = clerkUsers.find((u) => u.id === userId)
+    const userInfo = clerkUsers?.find((u) => u.id === userId)
     if (userInfo) {
       if (userInfo.firstName && userInfo.lastName) {
         return `${userInfo.firstName} ${userInfo.lastName}`
@@ -195,17 +206,17 @@ export function SchoolManagementSection() {
   }
 
   const getUserEmail = (userId: string) => {
-    const userInfo = clerkUsers.find((u) => u.id === userId)
+    const userInfo = clerkUsers?.find((u) => u.id === userId)
     return userInfo?.email || "No email"
   }
 
   const getUserAvatar = (userId: string) => {
-    const userInfo = clerkUsers.find((u) => u.id === userId)
+    const userInfo = clerkUsers?.find((u) => u.id === userId)
     return userInfo?.imageUrl || ""
   }
 
   const getUserInitials = (userId: string) => {
-    const userInfo = clerkUsers.find((u) => u.id === userId)
+    const userInfo = clerkUsers?.find((u) => u.id === userId)
     if (userInfo?.firstName && userInfo?.lastName) {
       return `${userInfo.firstName[0]}${userInfo.lastName[0]}`.toUpperCase()
     } else if (userInfo?.firstName) {
@@ -292,16 +303,29 @@ export function SchoolManagementSection() {
                         Your Role: {getUserRole(school.id)}
                       </Badge>
                     </div>
-                    {canManageAccess(school.id) && (
-                      <Button
-                        size="sm"
-                        onClick={() => setShowAccessForm(school.id)}
-                        className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                      >
-                        <Users className="h-4 w-4 mr-2" />
-                        Manage Access
-                      </Button>
-                    )}
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                      {canManageAccess(school.id) && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => setShowAccessForm(school.id)}
+                            className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                          >
+                            <Users className="h-4 w-4 mr-2" />
+                            Manage Access
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteSchool(school.id, school.name)}
+                            className="w-full sm:w-auto"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete School
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {showAccessForm === school.id && (

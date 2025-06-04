@@ -15,6 +15,7 @@ import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 export function Dashboard() {
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null)
   const { role } = useSchoolPermissions(selectedSchoolId)
+  const [selectedSchoolName,setSelectedSchoolName]=useState<string|null>("")
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -28,7 +29,12 @@ export function Dashboard() {
           )}
         </div>
         <div className="w-full sm:w-auto">
-          <SchoolSelector selectedSchoolId={selectedSchoolId} onSchoolChange={setSelectedSchoolId} />
+          <SchoolSelector 
+          setSelectedSchoolName={setSelectedSchoolName}
+          selectedSchoolId={selectedSchoolId} 
+          onSchoolChange={setSelectedSchoolId}
+         
+          />
         </div>
       </div>
 
@@ -75,7 +81,9 @@ export function Dashboard() {
         </TabsContent>
 
         <TabsContent value="billing">
-          <BillingSection selectedSchoolId={selectedSchoolId} />
+          <BillingSection 
+          schoolNamep={selectedSchoolName}
+          selectedSchoolId={selectedSchoolId} />
         </TabsContent>
 
         <TabsContent value="expenses">

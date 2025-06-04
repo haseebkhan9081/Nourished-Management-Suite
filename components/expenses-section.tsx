@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Trash2, Copy } from "lucide-react"
-import { supabase, type Expense } from "@/lib/supabase"
+import { Plus, Trash2, Copy, Loader2 } from "lucide-react"
+import type { Expense } from "@/lib/supabase"
 import { useUser } from "@clerk/nextjs"
 import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 
@@ -19,12 +19,22 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
   const { user } = useUser()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(false)
+  const [operationLoading, setOperationLoading] = useState(false) // New state for operation loading
   const [selectedMonth, setSelectedMonth] = useState("")
   const [showAddExpenseForm, setShowAddExpenseForm] = useState(false)
   const [newExpense, setNewExpense] = useState({ expense_name: "", amount: "" })
   const [totalExpenses, setTotalExpenses] = useState(0)
   const [previousMonths, setPreviousMonths] = useState<string[]>([])
   const [copyingExpenses, setCopyingExpenses] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
+
+  // Format currency in PKR with proper formatting
+  const formatCurrency = (amount: number) => {
+    return amount.toLocaleString("en-PK", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+  }
 
   useEffect(() => {
     if (selectedSchoolId && selectedMonth) {
@@ -38,14 +48,9 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
 
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from("expenses")
-        .select("*")
-        .eq("school_id", selectedSchoolId)
-        .eq("month_year", selectedMonth)
-        .order("created_at", { ascending: true })
-
-      if (error) throw error
+      const res = await fetch(`/api/expenses/${selectedSchoolId}?month=${selectedMonth}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Unknown error")
 
       setExpenses(data || [])
       calculateTotal(data || [])
@@ -60,18 +65,11 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
     if (!selectedSchoolId || !selectedMonth) return
 
     try {
-      const { data, error } = await supabase
-        .from("expenses")
-        .select("month_year")
-        .eq("school_id", selectedSchoolId)
-        .not("month_year", "eq", selectedMonth)
-        .order("month_year", { ascending: false })
+      const res = await fetch(`/api/expenses/previousMonths/${selectedSchoolId}?excludeMonth=${selectedMonth}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Unknown error")
 
-      if (error) throw error
-
-      // Extract unique month_year values
-      const uniqueMonths = Array.from(new Set(data?.map((item) => item.month_year)))
-      setPreviousMonths(uniqueMonths)
+      setPreviousMonths(data)
     } catch (error) {
       console.error("Error fetching previous months:", error)
     }
@@ -85,21 +83,33 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
   const addExpense = async () => {
     if (!selectedSchoolId || !selectedMonth || !newExpense.expense_name || !newExpense.amount) return
 
+    setOperationLoading(true) // Show loading overlay
     try {
-      const { error } = await supabase.from("expenses").insert({
-        school_id: selectedSchoolId,
-        month_year: selectedMonth,
-        expense_name: newExpense.expense_name,
-        amount: Number(newExpense.amount),
+      const res = await fetch("/api/expenses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          school_id: selectedSchoolId,
+          month_year: selectedMonth,
+          expense_name: newExpense.expense_name,
+          amount: Number(newExpense.amount),
+        }),
       })
 
-      if (error) throw error
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || "Failed to add expense")
+      }
 
       setNewExpense({ expense_name: "", amount: "" })
       setShowAddExpenseForm(false)
       fetchExpenses()
     } catch (error) {
       console.error("Error adding expense:", error)
+    } finally {
+      setOperationLoading(false) // Hide loading overlay
     }
   }
 
@@ -108,13 +118,22 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
       return
     }
 
+    setOperationLoading(true) // Show loading overlay
     try {
-      const { error } = await supabase.from("expenses").delete().eq("id", expenseId)
+      const res = await fetch(`/api/schools/${selectedSchoolId}/expenses/${expenseId}`, {
+        method: "DELETE",
+      })
 
-      if (error) throw error
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || "Failed to delete expense")
+      }
+
       fetchExpenses()
     } catch (error) {
       console.error("Error deleting expense:", error)
+    } finally {
+      setOperationLoading(false) // Hide loading overlay
     }
   }
 
@@ -122,40 +141,32 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
     if (!selectedSchoolId || !selectedMonth) return
 
     setCopyingExpenses(true)
+    setOperationLoading(true) // Show loading overlay
+
     try {
-      // Fetch expenses from the previous month
-      const { data: previousExpenses, error: fetchError } = await supabase
-        .from("expenses")
-        .select("*")
-        .eq("school_id", selectedSchoolId)
-        .eq("month_year", previousMonth)
+      const res = await fetch(`/api/schools/${selectedSchoolId}/copy-expenses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          previousMonth,
+          currentMonth: selectedMonth,
+        }),
+      })
 
-      if (fetchError) throw fetchError
+      const result = await res.json()
 
-      if (!previousExpenses || previousExpenses.length === 0) {
-        alert("No expenses found in the selected month.")
-        return
+      if (!res.ok) {
+        throw new Error(result.error || "Unknown error")
       }
 
-      // Create new expenses for the current month
-      const newExpenses = previousExpenses.map((expense) => ({
-        school_id: selectedSchoolId,
-        month_year: selectedMonth,
-        expense_name: expense.expense_name,
-        amount: expense.amount,
-      }))
-
-      const { error: insertError } = await supabase.from("expenses").insert(newExpenses)
-
-      if (insertError) throw insertError
-
       fetchExpenses()
-      alert(`Successfully copied ${newExpenses.length} expenses from ${formatMonthYear(previousMonth)}`)
-    } catch (error) {
+      alert(result.message)
+    } catch (error: any) {
       console.error("Error copying expenses:", error)
-      alert("Failed to copy expenses. Please try again.")
+      alert(error.message || "Failed to copy expenses.")
     } finally {
       setCopyingExpenses(false)
+      setOperationLoading(false) // Hide loading overlay
     }
   }
 
@@ -188,170 +199,207 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <CardTitle className="text-[#A2BD9D]">Monthly Expenses</CardTitle>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-            <label className="text-sm font-medium whitespace-nowrap">Select Month/Year:</label>
-            <Input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full sm:w-48 border-[#A2BD9D] focus:ring-[#A2BD9D]"
-              placeholder="Select month..."
-            />
+    <div className="relative">
+      {/* Loading Overlay */}
+      {operationLoading && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-4 rounded-lg shadow-lg flex items-center gap-3">
+            <Loader2 className="h-6 w-6 text-[#A2BD9D] animate-spin" />
+            <p className="text-gray-700 font-medium">Processing...</p>
           </div>
         </div>
-      </CardHeader>
-      <CardContent>
-        {!selectedMonth ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500">Please select a month to view or add expenses</p>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                {permissions.canCreate && (
-                  <Button
-                    onClick={() => setShowAddExpenseForm(true)}
-                    className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Expense
-                  </Button>
-                )}
+      )}
 
-                {permissions.canCreate && previousMonths.length > 0 && (
-                  <div className="relative w-full sm:w-auto">
-                    <Button
-                      variant="outline"
-                      onClick={() => document.getElementById("copyMonthDropdown")?.click()}
-                      className="w-full sm:w-auto"
-                      disabled={copyingExpenses}
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy From Previous Month
-                    </Button>
-                    <select
-                      id="copyMonthDropdown"
-                      className="absolute opacity-0 w-0 h-0"
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          copyFromPreviousMonth(e.target.value)
-                          e.target.value = ""
-                        }
-                      }}
-                    >
-                      <option value="">Select month</option>
-                      {previousMonths.map((month) => (
-                        <option key={month} value={month}>
-                          {formatMonthYear(month)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <CardTitle className="text-[#A2BD9D]">Monthly Expenses</CardTitle>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
+              <label className="text-sm font-medium whitespace-nowrap">Select Month/Year:</label>
+              <Input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="w-full sm:w-48 border-[#A2BD9D] focus:ring-[#A2BD9D]"
+                placeholder="Select month..."
+              />
             </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!selectedMonth ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500">Please select a month to view or add expenses</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  {permissions.canCreate && (
+                    <Button
+                      onClick={() => setShowAddExpenseForm(true)}
+                      className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Expense
+                    </Button>
+                  )}
 
-            {showAddExpenseForm && permissions.canCreate && (
-              <Card className="mb-6 border-[#A2BD9D]">
-                <CardContent className="p-4">
-                  <h3 className="font-semibold mb-4">Add New Expense</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <Input
-                      placeholder="Expense name"
-                      value={newExpense.expense_name}
-                      onChange={(e) => setNewExpense({ ...newExpense, expense_name: e.target.value })}
-                      className="w-full"
-                    />
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="Amount"
-                      value={newExpense.amount}
-                      onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
-                      className="w-full"
-                    />
-                    <div className="flex space-x-2">
-                      <Button
-                        onClick={addExpense}
-                        className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                        disabled={!newExpense.expense_name || !newExpense.amount}
-                      >
-                        Save
-                      </Button>
+                  {permissions.canCreate && previousMonths.length > 0 && (
+                    <div className="relative w-full sm:w-auto">
                       <Button
                         variant="outline"
-                        onClick={() => {
-                          setShowAddExpenseForm(false)
-                          setNewExpense({ expense_name: "", amount: "" })
-                        }}
-                        className="w-full sm:w-auto"
+                        onClick={() => setShowDropdown((prev) => !prev)}
+                        className="w-full sm:w-auto border-[#A2BD9D]/30 hover:border-[#A2BD9D] hover:bg-[#A2BD9D]/5"
+                        disabled={copyingExpenses}
                       >
-                        Cancel
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy From Previous Month
                       </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
-            {loading ? (
-              <div className="text-center py-8">Loading expenses...</div>
-            ) : expenses.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">No expenses found for {formatMonthYear(selectedMonth)}</p>
-                {permissions.canCreate && (
-                  <p className="text-sm text-gray-400 mt-2">
-                    Add expenses using the button above or copy from a previous month
-                  </p>
-                )}
+                      {showDropdown && (
+                        <div className="absolute left-0 top-full mt-2 w-full sm:w-64 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                          <select
+                            className="block w-full px-4 py-2 text-sm text-gray-700 bg-white border-none rounded-md focus:outline-none focus:ring-2 focus:ring-[#A2BD9D]"
+                            onChange={(e) => {
+                              const value = e.target.value
+                              if (value) {
+                                copyFromPreviousMonth(value)
+                                e.target.value = ""
+                                setShowDropdown(false)
+                              }
+                            }}
+                          >
+                            <option value="">Select month</option>
+                            {previousMonths.map((month) => (
+                              <option key={month} value={month}>
+                                {formatMonthYear(month)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Expense Name</TableHead>
-                        <TableHead>Amount</TableHead>
-                        {permissions.canDelete && <TableHead>Actions</TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {expenses.map((expense) => (
-                        <TableRow key={expense.id}>
-                          <TableCell className="font-medium">{expense.expense_name}</TableCell>
-                          <TableCell>${Number(expense.amount).toFixed(2)}</TableCell>
+
+              {showAddExpenseForm && permissions.canCreate && (
+                <Card className="mb-6 border-[#A2BD9D]/30 shadow-sm">
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold mb-4 text-[#A2BD9D]">Add New Expense</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <Input
+                        placeholder="Expense name"
+                        value={newExpense.expense_name}
+                        onChange={(e) => setNewExpense({ ...newExpense, expense_name: e.target.value })}
+                        className="w-full border-[#A2BD9D]/30 focus:border-[#A2BD9D] focus:ring-[#A2BD9D]/20"
+                      />
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
+                          ₨
+                        </span>
+                        <Input
+                          type="number"
+                          step="1"
+                          placeholder="0"
+                          value={newExpense.amount}
+                          onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
+                          className="w-full pl-8 border-[#A2BD9D]/30 focus:border-[#A2BD9D] focus:ring-[#A2BD9D]/20"
+                        />
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button
+                          onClick={addExpense}
+                          className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                          disabled={!newExpense.expense_name || !newExpense.amount || operationLoading}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowAddExpenseForm(false)
+                            setNewExpense({ expense_name: "", amount: "" })
+                          }}
+                          className="w-full sm:w-auto border-[#A2BD9D]/30 hover:border-[#A2BD9D] hover:bg-[#A2BD9D]/5"
+                          disabled={operationLoading}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {loading ? (
+                <div className="text-center py-8">Loading expenses...</div>
+              ) : expenses.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-gray-400 mb-2">💰</div>
+                  <p className="text-gray-500 font-medium">No expenses found for {formatMonthYear(selectedMonth)}</p>
+                  {permissions.canCreate && (
+                    <p className="text-sm text-gray-400 mt-2">
+                      Add expenses using the button above or copy from a previous month
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-[#A2BD9D]/5">
+                          <TableHead className="text-[#A2BD9D] font-semibold">Expense Name</TableHead>
+                          <TableHead className="text-[#A2BD9D] font-semibold">Amount (PKR)</TableHead>
                           {permissions.canDelete && (
-                            <TableCell>
-                              <Button size="sm" variant="destructive" onClick={() => deleteExpense(expense.id)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
+                            <TableHead className="text-[#A2BD9D] font-semibold">Actions</TableHead>
                           )}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <div className="mt-6 flex justify-end">
-                  <div className="bg-[#A2BD9D] text-white p-4 rounded-lg w-full sm:w-auto">
-                    <div className="text-lg font-semibold text-center sm:text-left">
-                      Total Expenses: ${totalExpenses.toFixed(2)}
-                    </div>
-                    <div className="text-sm opacity-90 text-center sm:text-left">{formatMonthYear(selectedMonth)}</div>
+                      </TableHeader>
+                      <TableBody>
+                        {expenses.map((expense) => (
+                          <TableRow key={expense.id} className="hover:bg-[#A2BD9D]/5">
+                            <TableCell className="font-medium text-gray-800">{expense.expense_name}</TableCell>
+                            <TableCell className="font-semibold text-gray-700">
+                              ₨{formatCurrency(Number(expense.amount))}
+                            </TableCell>
+                            {permissions.canDelete && (
+                              <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => deleteExpense(expense.id)}
+                                  className="hover:bg-red-600"
+                                  disabled={operationLoading}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
-                </div>
-              </>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+
+                  <div className="mt-6 flex justify-end">
+                    <div className="bg-gradient-to-r from-[#A2BD9D] to-[#8FA889] text-white p-4 rounded-lg w-full sm:w-auto shadow-sm">
+                      <div className="text-lg font-semibold text-center sm:text-left">
+                        Total Expenses: ₨{formatCurrency(totalExpenses)}
+                      </div>
+                      <div className="text-sm opacity-90 text-center sm:text-left">
+                        {formatMonthYear(selectedMonth)}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }

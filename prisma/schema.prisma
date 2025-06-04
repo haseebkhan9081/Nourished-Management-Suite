@@ -1,0 +1,98 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model School {
+  id           Int           @id @default(autoincrement())
+  name         String
+  address      String
+  created_at   DateTime      @default(now())
+  updated_at   DateTime      @updatedAt
+
+  meals        Meal[]
+  students     Student[]
+  expenses     Expense[]
+  schoolAccess SchoolAccess[]
+}
+
+model Meal {
+  id           Int          @id @default(autoincrement())
+  school_id    Int
+  date         DateTime
+  day_of_week  String
+  total_cost   Float
+  created_at   DateTime     @default(now())
+  updated_at   DateTime     @updatedAt
+
+  meal_items   MealItem[]
+
+  school       School       @relation(fields: [school_id], references: [id])
+}
+
+model MealItem {
+  id          Int       @id @default(autoincrement())
+  meal_id     Int
+  item_name   String
+  unit_price  Float
+  quantity    Int
+  total       Float
+  created_at  DateTime  @default(now())
+
+  meal        Meal      @relation(fields: [meal_id], references: [id])
+}
+
+model Student {
+  id               Int           @id @default(autoincrement())
+  school_id        Int
+  student_id       String
+  system_id        String
+  name             String
+  class_department String
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+
+  attendance       Attendance[]
+
+  school           School        @relation(fields: [school_id], references: [id])
+}
+
+model Attendance {
+  id          Int       @id @default(autoincrement())
+  student_id  Int
+  date        DateTime
+  punch_times String[] 
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  students    Student   @relation(fields: [student_id], references: [id])
+}
+
+model Expense {
+  id          Int       @id @default(autoincrement())
+  school_id   Int
+  month_year  String
+  expense_name String
+  amount      Float
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  school      School    @relation(fields: [school_id], references: [id])
+}
+
+model SchoolAccess {
+  id         Int       @id @default(autoincrement())
+  school_id  Int
+  user_id    String
+  role       String
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  school     School    @relation(fields: [school_id], references: [id])
+}

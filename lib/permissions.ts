@@ -1,6 +1,4 @@
-import { supabase } from "./supabase"
-
-// Role hierarchy (higher index = more permissions)
+//Role hierarchy (higher index = more permissions)
 const ROLE_HIERARCHY = ["viewer", "editor", "admin"]
 
 export type Role = "admin" | "editor" | "viewer"
@@ -43,24 +41,22 @@ export const getRolePermissions = (role: Role): UserPermissions => {
   }
 }
 
+
+
 export const getUserRoleForSchool = async (userId: string, schoolId: number): Promise<Role> => {
   if (!userId || !schoolId) return "viewer"
-
   try {
-    const { data, error } = await supabase
-      .from("school_access")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("school_id", schoolId)
-      .single()
-
-    if (error || !data) return "viewer"
-    return data.role as Role
+    const res = await fetch(`/api/role?userId=${encodeURIComponent(userId)}&schoolId=${encodeURIComponent(schoolId)}`)
+    if (!res.ok) throw new Error("Failed to fetch role")
+    const json = await res.json()
+    return json.role || "viewer"
   } catch (error) {
     console.error("Error getting user role:", error)
     return "viewer"
   }
 }
+
+
 
 export const hasPermission = (userRole: Role, requiredRole: Role): boolean => {
   const userRoleIndex = ROLE_HIERARCHY.indexOf(userRole)

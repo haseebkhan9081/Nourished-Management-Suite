@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, X } from "lucide-react"
-import { supabase, type Meal, type MealItem } from "@/lib/supabase"
+import { Plus, Trash2, X, Loader2 } from "lucide-react"
+import type { Meal, MealItem } from "@/lib/supabase"
 import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 
 interface MealDataSectionProps {
@@ -15,41 +15,33 @@ interface MealDataSectionProps {
 }
 
 export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
+  const EXCHANGE_RATE = 300 // PKR to USD
   const { permissions, loading: loadingPermissions } = useSchoolPermissions(selectedSchoolId)
   const [meals, setMeals] = useState<(Meal & { meal_items: MealItem[] })[]>([])
   const [loading, setLoading] = useState(false)
+  const [operationLoading, setOperationLoading] = useState(false)
   const [editingItem, setEditingItem] = useState<{ mealId: number; itemId?: number } | null>(null)
   const [newItem, setNewItem] = useState({ item_name: "", unit_price: "", quantity: "" })
   const [showNewMealForm, setShowNewMealForm] = useState(false)
   const [newMealDate, setNewMealDate] = useState("")
 
   // Filter states
-  const [singleDateFilter, setSingleDateFilter] = useState("")
-  const [startDateFilter, setStartDateFilter] = useState("")
-  const [endDateFilter, setEndDateFilter] = useState("")
   const [monthFilter, setMonthFilter] = useState("")
 
-  useEffect(() => {
-    if (selectedSchoolId) {
-      fetchMeals()
-    }
-  }, [selectedSchoolId])
+  const useEffect = (effect: any, deps: any) => {
+    // Implementation of useEffect
+  }
 
-  const fetchMeals = async () => {
-    if (!selectedSchoolId) return
+  const fetchMeals = async (month: string = monthFilter) => {
+    if (!selectedSchoolId || !month) return
 
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from("meals")
-        .select(`
-          *,
-          meal_items (*)
-        `)
-        .eq("school_id", selectedSchoolId)
-        .order("date", { ascending: false })
-
-      if (error) throw error
+      const res = await fetch(`/api/meals?school_id=${selectedSchoolId}&month=${month}`)
+      if (!res.ok) {
+        throw new Error("Failed to fetch meals")
+      }
+      const data = await res.json()
       setMeals(data || [])
     } catch (error) {
       console.error("Error fetching meals:", error)
@@ -61,72 +53,81 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   const addMealItem = async (mealId: number) => {
     if (!permissions.canEdit || !newItem.item_name || !newItem.unit_price || !newItem.quantity) return
 
+    setOperationLoading(true)
     try {
-      const { error } = await supabase.from("meal_items").insert({
-        meal_id: mealId,
-        item_name: newItem.item_name,
-        unit_price: Number.parseFloat(newItem.unit_price),
-        quantity: Number.parseInt(newItem.quantity),
+      const res = await fetch("/api/meal-items/add", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          meal_id: mealId,
+          item_name: newItem.item_name,
+          unit_price: (Number.parseFloat(newItem.unit_price) / EXCHANGE_RATE).toString(),
+          quantity: newItem.quantity,
+        }),
       })
 
-      if (error) throw error
+      if (!res.ok) {
+        throw new Error("Failed to add meal item")
+      }
 
       setNewItem({ item_name: "", unit_price: "", quantity: "" })
       setEditingItem(null)
-      fetchMeals()
+      fetchMeals(monthFilter)
     } catch (error) {
       console.error("Error adding meal item:", error)
+    } finally {
+      setOperationLoading(false)
     }
   }
 
   const deleteMealItem = async (itemId: number) => {
     if (!permissions.canDelete) return
 
+    setOperationLoading(true)
     try {
-      const { error } = await supabase.from("meal_items").delete().eq("id", itemId)
+      const res = await fetch("/api/meal-items/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId }),
+      })
 
-      if (error) throw error
+      if (!res.ok) throw new Error("Failed to delete meal item")
+
       fetchMeals()
     } catch (error) {
       console.error("Error deleting meal item:", error)
+    } finally {
+      setOperationLoading(false)
     }
   }
 
   const createNewMeal = async () => {
     if (!permissions.canCreate || !selectedSchoolId || !newMealDate) return
 
+    setOperationLoading(true)
     try {
-      // Check if meal already exists for this date and school
-      const { data: existingMeal, error: checkError } = await supabase
-        .from("meals")
-        .select("id")
-        .eq("school_id", selectedSchoolId)
-        .eq("date", newMealDate)
-
-      if (checkError) throw checkError
-
-      if (existingMeal && existingMeal.length > 0) {
-        alert("A meal entry already exists for this date. Please choose a different date.")
-        return
-      }
-
-      const date = new Date(newMealDate)
-      const dayOfWeek = date.toLocaleDateString("en-US", { weekday: "long" })
-
-      const { error } = await supabase.from("meals").insert({
-        school_id: selectedSchoolId,
-        date: newMealDate,
-        day_of_week: dayOfWeek,
-        total_cost: 0,
+      const res = await fetch("/api/meals/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ school_id: selectedSchoolId, date: newMealDate }),
       })
 
-      if (error) throw error
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || "Failed to create new meal.")
+        return
+      }
 
       setNewMealDate("")
       setShowNewMealForm(false)
       fetchMeals()
     } catch (error) {
       console.error("Error creating new meal:", error)
+    } finally {
+      setOperationLoading(false)
     }
   }
 
@@ -141,44 +142,27 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
       return
     }
 
+    setOperationLoading(true)
     try {
-      const { error } = await supabase.from("meals").delete().eq("id", mealId)
+      const res = await fetch(`/api/meals/delete?mealId=${mealId}`, {
+        method: "DELETE",
+      })
 
-      if (error) throw error
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete meal")
+      }
+
       fetchMeals()
     } catch (error) {
       console.error("Error deleting meal:", error)
+    } finally {
+      setOperationLoading(false)
     }
   }
 
-  const clearAllFilters = () => {
-    setSingleDateFilter("")
-    setStartDateFilter("")
-    setEndDateFilter("")
-    setMonthFilter("")
-  }
-
-  const filteredMeals = meals.filter((meal) => {
-    // Single date filter
-    if (singleDateFilter) {
-      return meal.date === singleDateFilter
-    }
-
-    // Date range filter
-    if (startDateFilter && endDateFilter) {
-      return meal.date >= startDateFilter && meal.date <= endDateFilter
-    }
-
-    // Month filter
-    if (monthFilter) {
-      const mealMonth = new Date(meal.date).toISOString().slice(0, 7)
-      return mealMonth === monthFilter
-    }
-
-    return true
-  })
-
-  const hasActiveFilters = singleDateFilter || startDateFilter || endDateFilter || monthFilter
+  const filteredMeals = meals // Remove the filtering since API now handles it
 
   if (!selectedSchoolId) {
     return (
@@ -201,252 +185,242 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <CardTitle className="text-[#A2BD9D]">Meal Data</CardTitle>
-          {permissions.canCreate && (
-            <Button
-              onClick={() => setShowNewMealForm(true)}
-              className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add New Day
-            </Button>
+    <div className="relative">
+      {/* Loading Overlay */}
+      {operationLoading && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-4 rounded-lg shadow-lg flex items-center gap-3">
+            <Loader2 className="h-6 w-6 text-[#A2BD9D] animate-spin" />
+            <p className="text-gray-700 font-medium">Processing...</p>
+          </div>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <CardTitle className="text-[#A2BD9D]">Meal Data</CardTitle>
+            {permissions.canCreate&&monthFilter&& (
+              <Button
+                onClick={() => setShowNewMealForm(true)}
+                className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add New Day
+              </Button>
+            )}
+          </div>
+
+          {/* Month/Year Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4 p-3 bg-gray-50 rounded-lg border">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
+              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Filter by Month:</label>
+              <Input
+                type="month"
+                value={monthFilter}
+                onChange={(e) => {
+                  setMonthFilter(e.target.value)
+                  if (e.target.value && selectedSchoolId) {
+                    console.log("calling fetchMeals with ", e.target.value)
+                    fetchMeals(e.target.value)
+                  }
+                }}
+                className="w-full sm:w-44 h-9 text-sm border-gray-300 focus:border-[#A2BD9D] focus:ring-[#A2BD9D]"
+                placeholder="Select month..."
+              />
+            </div>
+            {monthFilter && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setMonthFilter("")
+                  setMeals([])
+                }}
+                className="h-9 px-2 text-xs flex items-center gap-1 whitespace-nowrap self-start sm:self-auto"
+              >
+                <X className="h-3 w-3 flex-shrink-0" />
+                <span className="hidden sm:inline">Clear</span>
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {showNewMealForm && permissions.canCreate && (
+            <Card className="mb-4 border-[#A2BD9D]">
+              <CardContent className="p-4">
+                <h3 className="font-semibold mb-4">Add New Meal Day</h3>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
+                  <Input
+                    type="date"
+                    value={newMealDate}
+                    onChange={(e) => setNewMealDate(e.target.value)}
+                    className="w-full sm:w-48"
+                  />
+                  <Button
+                    onClick={createNewMeal}
+                    className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                    disabled={!newMealDate}
+                  >
+                    Create Meal Day
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowNewMealForm(false)
+                      setNewMealDate("")
+                    }}
+                    className="w-full sm:w-auto"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           )}
-        </div>
-
-        {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Single Date:</label>
-            <Input
-              type="date"
-              value={singleDateFilter}
-              onChange={(e) => {
-                setSingleDateFilter(e.target.value)
-                setStartDateFilter("")
-                setEndDateFilter("")
-                setMonthFilter("")
-              }}
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Start Date:</label>
-            <Input
-              type="date"
-              value={startDateFilter}
-              onChange={(e) => {
-                setStartDateFilter(e.target.value)
-                setSingleDateFilter("")
-                setMonthFilter("")
-              }}
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">End Date:</label>
-            <Input
-              type="date"
-              value={endDateFilter}
-              onChange={(e) => {
-                setEndDateFilter(e.target.value)
-                setSingleDateFilter("")
-                setMonthFilter("")
-              }}
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Month/Year:</label>
-            <Input
-              type="month"
-              value={monthFilter}
-              onChange={(e) => {
-                setMonthFilter(e.target.value)
-                setSingleDateFilter("")
-                setStartDateFilter("")
-                setEndDateFilter("")
-              }}
-              className="w-full"
-            />
-          </div>
-        </div>
-
-        {hasActiveFilters && (
-          <div className="flex justify-end mt-4">
-            <Button variant="outline" onClick={clearAllFilters} size="sm">
-              <X className="h-4 w-4 mr-2" />
-              Clear Filters
-            </Button>
-          </div>
-        )}
-      </CardHeader>
-      <CardContent>
-        {showNewMealForm && permissions.canCreate && (
-          <Card className="mb-4 border-[#A2BD9D]">
-            <CardContent className="p-4">
-              <h3 className="font-semibold mb-4">Add New Meal Day</h3>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-                <Input
-                  type="date"
-                  value={newMealDate}
-                  onChange={(e) => setNewMealDate(e.target.value)}
-                  className="w-full sm:w-48"
-                />
-                <Button
-                  onClick={createNewMeal}
-                  className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                  disabled={!newMealDate}
-                >
-                  Create Meal Day
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowNewMealForm(false)
-                    setNewMealDate("")
-                  }}
-                  className="w-full sm:w-auto"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        {loading ? (
-          <div className="text-center py-8">Loading meals...</div>
-        ) : (
-          <div className="space-y-4">
-            {filteredMeals.map((meal) => (
-              <div key={meal.id} className="border rounded-lg p-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                  <div>
-                    <h3 className="font-semibold">
-                      {new Date(meal.date).toLocaleDateString()} - {meal.day_of_week}
-                    </h3>
-                    <Badge variant="outline" className="mt-1">
-                      Total: ${calculateMealTotal(meal.meal_items).toFixed(2)}
-                    </Badge>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                    {permissions.canEdit && (
-                      <Button
-                        size="sm"
-                        onClick={() => setEditingItem({ mealId: meal.id })}
-                        className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add Item
-                      </Button>
-                    )}
-                    {permissions.canDelete && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => deleteMeal(meal.id)}
-                        className="w-full sm:w-auto"
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete Day
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Item Name</TableHead>
-                        <TableHead>Unit Price</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Total</TableHead>
-                        {permissions.canDelete && <TableHead>Actions</TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {meal.meal_items.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.item_name}</TableCell>
-                          <TableCell>${item.unit_price.toFixed(2)}</TableCell>
-                          <TableCell>{item.quantity}</TableCell>
-                          <TableCell>${(item.unit_price * item.quantity).toFixed(2)}</TableCell>
-                          {permissions.canDelete && (
-                            <TableCell>
-                              <Button size="sm" variant="destructive" onClick={() => deleteMealItem(item.id)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      ))}
-                      {editingItem?.mealId === meal.id && permissions.canEdit && (
-                        <TableRow>
-                          <TableCell>
-                            <Input
-                              placeholder="Item name"
-                              value={newItem.item_name}
-                              onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              placeholder="0.00"
-                              value={newItem.unit_price}
-                              onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              placeholder="0"
-                              value={newItem.quantity}
-                              onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            $
-                            {(
-                              Number.parseFloat(newItem.unit_price || "0") * Number.parseInt(newItem.quantity || "0")
-                            ).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
-                              <Button
-                                size="sm"
-                                onClick={() => addMealItem(meal.id)}
-                                className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setEditingItem(null)}
-                                className="w-full sm:w-auto"
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
+          {!monthFilter ? (
+            <div className="text-center py-12">
+              <div className="text-gray-400 mb-2">📅</div>
+              <p className="text-gray-500 font-medium">Select a month to view meal data</p>
+              <p className="text-gray-400 text-sm">Choose a month and year from the filter above</p>
+            </div>
+          ) : loading ? (
+            <div className="text-center py-8">Loading meals...</div>
+          ) : filteredMeals.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-gray-400 mb-2">🍽️</div>
+              <p className="text-gray-500 font-medium">No meal data found</p>
+              <p className="text-gray-400 text-sm">No meals recorded for the selected month</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredMeals.map((meal) => (
+                <div key={meal.id} className="border rounded-lg p-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                    <div>
+                      <h3 className="font-semibold">
+                        {new Date(meal.date).toLocaleDateString()} - {meal.day_of_week}
+                      </h3>
+                      <div className="mt-1 space-y-1">
+                        <Badge variant="outline" className="text-base font-semibold">
+                          Total: ₨{(calculateMealTotal(meal.meal_items) * EXCHANGE_RATE).toFixed(0)}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                      {permissions.canEdit && (
+                        <Button
+                          size="sm"
+                          onClick={() => setEditingItem({ mealId: meal.id })}
+                          className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add Item
+                        </Button>
                       )}
-                    </TableBody>
-                  </Table>
+                      {permissions.canDelete && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => deleteMeal(meal.id)}
+                          className="w-full sm:w-auto"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete Day
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Item Name</TableHead>
+                          <TableHead>Unit Price (PKR Input)</TableHead>
+                          <TableHead>Quantity</TableHead>
+                          <TableHead>Total</TableHead>
+                          {permissions.canDelete && <TableHead>Actions</TableHead>}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {meal.meal_items.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>{item.item_name}</TableCell>
+                            <TableCell>₨{(item.unit_price * EXCHANGE_RATE).toFixed(0)}</TableCell>
+                            <TableCell>{item.quantity}</TableCell>
+                            <TableCell>₨{(item.unit_price * EXCHANGE_RATE * item.quantity).toFixed(0)}</TableCell>
+                            {permissions.canDelete && (
+                              <TableCell>
+                                <Button size="sm" variant="destructive" onClick={() => deleteMealItem(item.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                        {editingItem?.mealId === meal.id && permissions.canEdit && (
+                          <TableRow>
+                            <TableCell>
+                              <Input
+                                placeholder="Item name"
+                                value={newItem.item_name}
+                                onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00 PKR"
+                                value={newItem.unit_price}
+                                onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                value={newItem.quantity}
+                                onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              ₨
+                              {(
+                                Number.parseFloat(newItem.unit_price || "0") * Number.parseInt(newItem.quantity || "0")
+                              ).toFixed(0)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => addMealItem(meal.id)}
+                                  className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingItem(null)}
+                                  className="w-full sm:w-auto"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
