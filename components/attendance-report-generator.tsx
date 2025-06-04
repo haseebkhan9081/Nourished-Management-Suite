@@ -216,6 +216,7 @@ export function AttendanceReportGenerator({
       // Sort all attendance records by name
      const sortedAttendanceData = [...attendanceData].sort(
   (a, b) => a.students.name.localeCompare(b.students.name),
+  //
 )
 
       // Process each attendance record
