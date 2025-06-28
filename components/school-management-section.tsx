@@ -59,7 +59,7 @@ export function SchoolManagementSection() {
 
     setLoading(true)
     try {
-      const res = await fetch(`/api/schools?user_id=${user.id}`)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/user-schools?userId=${user.id}`)
       if (!res.ok) throw new Error("Failed to fetch user schools")
 
       const { accessData, allAccessData } = await res.json()
@@ -89,7 +89,8 @@ export function SchoolManagementSection() {
     if (!user?.id || !newSchool.name) return
 
     try {
-      const res = await fetch("/api/schools/create", {
+     const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/schools/create`, {
+
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -116,7 +117,8 @@ export function SchoolManagementSection() {
     if (!newAccess.user_id || !newAccess.role) return
 
     try {
-      const res = await fetch("/api/access/add", {
+     const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/access/add`, {
+
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -145,7 +147,8 @@ export function SchoolManagementSection() {
     }
 
     try {
-      const res = await fetch(`/api/access/remove?id=${accessId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/access/remove?id=${accessId}`, {
+
         method: "DELETE",
       })
 
@@ -168,7 +171,8 @@ export function SchoolManagementSection() {
     }
 
     try {
-      const res = await fetch(`/api/schools/delete?id=${schoolId}`, {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/schools/delete?id=${schoolId}`, {
         method: "DELETE",
       })
 

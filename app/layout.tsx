@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Nourished Management Suite",
-  description: "Comprehensive school meal and attendance management system",
+  description: "Nourished Management Suite for internal use",
   generator: "v0.dev",
 }
 

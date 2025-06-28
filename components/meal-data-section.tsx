@@ -37,11 +37,13 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
 
     setLoading(true)
     try {
-      const res = await fetch(`/api/meals?school_id=${selectedSchoolId}&month=${month}`)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/meals?school_id=${selectedSchoolId}&month=${month}`)
+
       if (!res.ok) {
         throw new Error("Failed to fetch meals")
       }
       const data = await res.json()
+      console.log("fetched meals : ",data)
       setMeals(data || [])
     } catch (error) {
       console.error("Error fetching meals:", error)
@@ -55,7 +57,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
 
     setOperationLoading(true)
     try {
-      const res = await fetch("/api/meal-items/add", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/meal-items/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -63,7 +65,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
         body: JSON.stringify({
           meal_id: mealId,
           item_name: newItem.item_name,
-          unit_price: (Number.parseFloat(newItem.unit_price) / EXCHANGE_RATE).toString(),
+          unit_price: (Number.parseFloat(newItem.unit_price) ).toString(),
           quantity: newItem.quantity,
         }),
       })
@@ -87,7 +89,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
 
     setOperationLoading(true)
     try {
-      const res = await fetch("/api/meal-items/delete", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/meal-items/delete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemId }),
@@ -108,7 +110,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
 
     setOperationLoading(true)
     try {
-      const res = await fetch("/api/meals/create", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/meals/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ school_id: selectedSchoolId, date: newMealDate }),
@@ -132,8 +134,18 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   }
 
   const calculateMealTotal = (items: MealItem[]) => {
-    return items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
-  }
+  
+
+  const total = items?.reduce((sum, item) => {
+    const price = Number(item?.unit_price) || 0;
+    const quantity = Number(item?.quantity) || 0;
+    return sum + price * quantity;
+  }, 0);
+
+ 
+  return total;
+};
+
 
   const deleteMeal = async (mealId: number) => {
     if (!permissions.canDelete) return
@@ -144,7 +156,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
 
     setOperationLoading(true)
     try {
-      const res = await fetch(`/api/meals/delete?mealId=${mealId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/meals/delete?mealId=${mealId}`, {
         method: "DELETE",
       })
 
@@ -162,7 +174,70 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
     }
   }
 
+
   const filteredMeals = meals // Remove the filtering since API now handles it
+
+const updateMealItem = async (meal:any,itemId: number, mealId: number) => {
+  console.log("🚀 updateMealItem called with:", { itemId, mealId });
+
+  //@ts-ignore
+  const item = meal?.meal_items?.find((i) => i.id == itemId); 
+  console.log(meals)
+  if (!item) {
+    console.warn("⚠️ No item found with that ID in meals");
+    return;
+  }
+
+  console.log("✅ Found item to update:", item);
+
+  const updatedItem = {
+    item_name: newItem.item_name || item.item_name,
+    unit_price: newItem.unit_price || item.unit_price.toString(),
+    quantity: newItem.quantity || item.quantity.toString(),
+  };
+
+  console.log("📦 Final item values being submitted:", updatedItem);
+
+  const payload = {
+    itemId,
+    meal_id: mealId,
+    item_name: updatedItem.item_name,
+    unit_price: parseFloat(updatedItem.unit_price), // Already in PKR now
+    quantity: parseInt(updatedItem.quantity),
+  };
+
+  console.log("📤 Payload to be sent to backend:", payload);
+
+  setOperationLoading(true);
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/meal-items/update`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    console.log("📡 Fetch response status:", res.status);
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("❌ Backend returned error:", errorText);
+      throw new Error("Failed to update meal item");
+    }
+
+    console.log("✅ Meal item updated successfully!");
+
+    // Reset state
+    setNewItem({ item_name: "", unit_price: "", quantity: "" });
+    setEditingItem(null);
+
+    console.log("🔁 Fetching meals again to update UI");
+    fetchMeals();
+  } catch (err) {
+    console.error("🔥 Error updating meal item:", err);
+  } finally {
+    setOperationLoading(false);
+  }
+};
 
   if (!selectedSchoolId) {
     return (
@@ -303,7 +378,7 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
                       </h3>
                       <div className="mt-1 space-y-1">
                         <Badge variant="outline" className="text-base font-semibold">
-                          Total: ₨{(calculateMealTotal(meal.meal_items) * EXCHANGE_RATE).toFixed(0)}
+                          Total: ₨{(calculateMealTotal(meal.meal_items) )}
                         </Badge>
                       </div>
                     </div>
@@ -311,7 +386,13 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
                       {permissions.canEdit && (
                         <Button
                           size="sm"
-                          onClick={() => setEditingItem({ mealId: meal.id })}
+                          onClick={() => {setEditingItem({ mealId: meal.id })
+                        setNewItem({
+                            item_name: "",
+                            unit_price: "0",
+                            quantity:"0",
+                          });
+                        }}
                           className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
                         >
                           <Plus className="h-4 w-4 mr-1" />
@@ -333,88 +414,194 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
                   </div>
 
                   <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Item Name</TableHead>
-                          <TableHead>Unit Price (PKR Input)</TableHead>
-                          <TableHead>Quantity</TableHead>
-                          <TableHead>Total</TableHead>
-                          {permissions.canDelete && <TableHead>Actions</TableHead>}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {meal.meal_items.map((item) => (
-                          <TableRow key={item.id}>
-                            <TableCell>{item.item_name}</TableCell>
-                            <TableCell>₨{(item.unit_price * EXCHANGE_RATE).toFixed(0)}</TableCell>
-                            <TableCell>{item.quantity}</TableCell>
-                            <TableCell>₨{(item.unit_price * EXCHANGE_RATE * item.quantity).toFixed(0)}</TableCell>
-                            {permissions.canDelete && (
-                              <TableCell>
-                                <Button size="sm" variant="destructive" onClick={() => deleteMealItem(item.id)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            )}
-                          </TableRow>
-                        ))}
-                        {editingItem?.mealId === meal.id && permissions.canEdit && (
-                          <TableRow>
-                            <TableCell>
-                              <Input
-                                placeholder="Item name"
-                                value={newItem.item_name}
-                                onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00 PKR"
-                                value={newItem.unit_price}
-                                onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                placeholder="0"
-                                value={newItem.quantity}
-                                onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              ₨
-                              {(
-                                Number.parseFloat(newItem.unit_price || "0") * Number.parseInt(newItem.quantity || "0")
-                              ).toFixed(0)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
-                                <Button
-                                  size="sm"
-                                  onClick={() => addMealItem(meal.id)}
-                                  className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
-                                >
-                                  Save
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setEditingItem(null)}
-                                  className="w-full sm:w-auto"
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
+  <Table>
+    <TableHeader>
+      <TableRow>
+        <TableHead>Item Name</TableHead>
+        <TableHead>Unit Price (PKR Input)</TableHead>
+        <TableHead>Quantity</TableHead>
+        <TableHead>Total</TableHead>
+        {permissions.canDelete && <TableHead>Actions</TableHead>}
+      </TableRow>
+    </TableHeader>
+    <TableBody>
+      {Array.isArray(meal?.meal_items) &&
+        meal.meal_items.filter((item) => item && item.item_name).length > 0 &&
+        meal.meal_items.map((item) => {
+          const isEditing = editingItem?.itemId === item?.id;
+
+          return (
+            <TableRow key={item?.id}>
+              {isEditing ? (
+                <>
+                  <TableCell>
+                    <Input
+                      placeholder="Item name"
+                      value={newItem.item_name}
+                      onChange={(e) =>
+                        setNewItem({ ...newItem, item_name: e.target.value })
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00 PKR"
+                      value={newItem.unit_price}
+                      onChange={(e) =>
+                        setNewItem({ ...newItem, unit_price: e.target.value })
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={newItem.quantity}
+                      onChange={(e) =>
+                        setNewItem({ ...newItem, quantity: e.target.value })
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    ₨
+                    {(
+                      Number.parseFloat(newItem.unit_price || "0") *
+                      Number.parseInt(newItem.quantity || "0")
+                    ).toFixed(0)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
+                      <Button
+                        size="sm"
+                        onClick={() => updateMealItem(meal,item.id, meal.id)}
+                        className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingItem(null)}
+                        className="w-full sm:w-auto"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </TableCell>
+                </>
+              ) : (
+                <>
+                  <TableCell>{item?.item_name}</TableCell>
+                  <TableCell>
+                    ₨{(item?.unit_price ).toFixed(0)}
+                  </TableCell>
+                  <TableCell>{item?.quantity}</TableCell>
+                  <TableCell>
+                    ₨
+                    {(item?.unit_price *item?.quantity).toFixed(
+                      0
+                    )}
+                  </TableCell>
+                  {permissions.canDelete && (
+                    <TableCell className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingItem({ mealId: meal?.id, itemId: item?.id });
+                          setNewItem({
+                            item_name: item.item_name,
+                            unit_price: (item.unit_price ).toFixed(2),
+                            quantity: item.quantity.toString(),
+                          });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteMealItem(item?.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  )}
+                </>
+              )}
+            </TableRow>
+          );
+        })}
+
+      {/* Add New Meal Item Row (at bottom) */}
+      {editingItem?.mealId === meal.id &&
+        !editingItem?.itemId &&
+        permissions.canEdit && (
+          <TableRow>
+            <TableCell>
+              <Input
+                placeholder="Item name"
+                value={newItem.item_name}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, item_name: e.target.value })
+                }
+              />
+            </TableCell>
+            <TableCell>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="0.00 PKR"
+                value={newItem.unit_price}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, unit_price: e.target.value })
+                }
+              />
+            </TableCell>
+            <TableCell>
+              <Input
+                type="number"
+                placeholder="0"
+                value={newItem.quantity}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, quantity: e.target.value })
+                }
+              />
+            </TableCell>
+            <TableCell>
+              ₨
+              {(
+                Number.parseFloat(newItem.unit_price || "0") *
+                Number.parseInt(newItem.quantity || "0")
+              ).toFixed(0)}
+            </TableCell>
+            <TableCell>
+              <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2">
+                <Button
+                  size="sm"
+                  onClick={() => addMealItem(meal.id)}
+                  className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+                >
+                  Add
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setEditingItem(null)}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        )}
+    </TableBody>
+  </Table>
+</div>
+
                 </div>
               ))}
             </div>

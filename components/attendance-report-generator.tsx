@@ -75,7 +75,7 @@ export function AttendanceReportGenerator({
 
     try {
       // Fetch attendance data for selected students
-      const response = await fetch("/api/attendance-report", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/attendance/report`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -383,7 +383,7 @@ export function ExcelUploadComponent({ selectedSchoolId, onDataCommitted }: Exce
     if (!selectedSchoolId) return null
 
     try {
-      const response = await fetch("/api/import-excel/batch", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/import-excel/batch`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
