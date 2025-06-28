@@ -60,7 +60,7 @@ export function BillingSection({ selectedSchoolId,schoolNamep }: BillingSectionP
 
     setLoading(true)
     try {
-      const res = await fetch(`/api/billing/${selectedSchoolId}?month=${selectedMonth}`)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/billing/${selectedSchoolId}?month=${selectedMonth}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Unknown error")
 
@@ -79,7 +79,7 @@ export function BillingSection({ selectedSchoolId,schoolNamep }: BillingSectionP
 
         meal.meal_items.forEach((item: any) => {
           // Convert USD to PKR for display
-          const unitPricePKR = item.unit_price * EXCHANGE_RATE
+          const unitPricePKR = item.unit_price 
           const itemTotal = unitPricePKR * item.quantity
           total += itemTotal
 

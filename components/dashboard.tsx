@@ -8,6 +8,7 @@ import { AttendanceDataSection } from "./attendance-data-section"
 import { BillingSection } from "./billing-section"
 import { ExpensesSection } from "./expenses-section"
 import { SchoolManagementSection } from "./school-management-section"
+
 // Add the useSchoolPermissions hook import
 import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 
@@ -39,7 +40,7 @@ export function Dashboard() {
       </div>
 
       <Tabs defaultValue="meals" className="space-y-4 sm:space-y-6">
-        <TabsList className="grid w-full grid-cols-5 h-auto">
+        <TabsList className="grid w-full grid-cols-6 h-auto">
           <TabsTrigger
             value="meals"
             className="data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white text-xs sm:text-sm p-2 sm:p-3"
@@ -70,6 +71,7 @@ export function Dashboard() {
           >
             Schools
           </TabsTrigger>
+          
         </TabsList>
 
         <TabsContent value="meals">
@@ -93,6 +95,8 @@ export function Dashboard() {
         <TabsContent value="schools">
           <SchoolManagementSection />
         </TabsContent>
+
+       
       </Tabs>
     </div>
   )

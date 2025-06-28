@@ -48,7 +48,7 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
 
     setLoading(true)
     try {
-      const res = await fetch(`/api/expenses/${selectedSchoolId}?month=${selectedMonth}`)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/expenses/${selectedSchoolId}?month=${selectedMonth}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Unknown error")
 
@@ -65,7 +65,7 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
     if (!selectedSchoolId || !selectedMonth) return
 
     try {
-      const res = await fetch(`/api/expenses/previousMonths/${selectedSchoolId}?excludeMonth=${selectedMonth}`)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/expenses/previousMonths/${selectedSchoolId}?excludeMonth=${selectedMonth}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Unknown error")
 
@@ -85,7 +85,7 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
 
     setOperationLoading(true) // Show loading overlay
     try {
-      const res = await fetch("/api/expenses", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/expenses`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -120,7 +120,7 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
 
     setOperationLoading(true) // Show loading overlay
     try {
-      const res = await fetch(`/api/schools/${selectedSchoolId}/expenses/${expenseId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/expenses/schools/${selectedSchoolId}/expenses/${expenseId}`, {
         method: "DELETE",
       })
 
@@ -144,7 +144,7 @@ export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
     setOperationLoading(true) // Show loading overlay
 
     try {
-      const res = await fetch(`/api/schools/${selectedSchoolId}/copy-expenses`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/expenses/schools/${selectedSchoolId}/copy-expenses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

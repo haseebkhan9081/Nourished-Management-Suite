@@ -185,7 +185,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
         params.append("date", selectedDate)
       }
 
-      const res = await fetch(`/api/attendance?${params.toString()}`)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/attendance?${params.toString()}`)
 
       if (!res.ok) {
         const errorData = await res.json()
@@ -257,7 +257,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
     if (!selectedSchoolId) return
 
     try {
-      const res = await fetch(`/api/students/${selectedSchoolId}`)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/students/${selectedSchoolId}`)
       if (!res.ok) throw new Error("Failed to fetch students")
 
       const data = await res.json()
@@ -271,7 +271,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
     if (!newPunchTime) return
 
     try {
-      const res = await fetch(`/api/attendance/${attendanceId}/punch`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/attendance/${attendanceId}/punch`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -291,7 +291,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
 
   const removePunchTime = async (attendanceId: number, timeIndex: number) => {
     try {
-      const res = await fetch(`/api/attendance/${attendanceId}/punch`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/attendance/${attendanceId}/punch`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -311,7 +311,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
     if (!selectedStudentId || !newAttendanceDate) return
 
     try {
-      const res = await fetch("/api/attendance", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/attendance`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -346,7 +346,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
     }
 
     try {
-      const res = await fetch(`/api/attendance/${attendanceId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/attendance/${attendanceId}`, {
         method: "DELETE",
       })
 

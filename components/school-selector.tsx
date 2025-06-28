@@ -27,12 +27,12 @@ export function SchoolSelector({ selectedSchoolId, onSchoolChange,setSelectedSch
 
   setLoading(true)
   try {
-    const res = await fetch(`/api/user-schools?userId=${user.id}`)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/user-schools?userId=${user.id}`)
     if (!res.ok) {
       const data = await res.json()
       throw new Error(data.error || "Failed to fetch user schools")
     }
-    const accessData = await res.json()
+    const { accessData, allAccessData } = await res.json()
 
     const userSchools = accessData.map((access: any) => access.school).filter(Boolean)
     setSchools(userSchools)
