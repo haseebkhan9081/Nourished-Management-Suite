@@ -46,10 +46,10 @@ export const getRolePermissions = (role: Role): UserPermissions => {
 export const getUserRoleForSchool = async (userId: string, schoolId: number): Promise<Role> => {
   if (!userId || !schoolId) return "viewer"
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+
 
   try {
-    const res = await fetch(`${API_BASE_URL}/role?userId=${encodeURIComponent(userId)}&schoolId=${encodeURIComponent(schoolId)}`)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/role?userId=${encodeURIComponent(userId)}&schoolId=${encodeURIComponent(schoolId)}`)
     if (!res.ok) throw new Error("Failed to fetch role")
     const json = await res.json()
     return json.role || "viewer"

@@ -4,7 +4,10 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { LoadingOverlay } from "@/components/LoadingOverlay"
+import { BillingMonthSelector } from "@/components/BillingMonthSelector"
+import { BillingTable } from "@/components/BillingTable"
+import { BillingPDFDialog } from "@/components/BillingPDFDialog"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -32,7 +35,10 @@ interface GroupedBillingData {
   }
 }
 
-export function BillingSection({ selectedSchoolId,schoolNamep }: BillingSectionProps) {
+// Helper to format YYYY-MM-DD as readable string without Date object
+
+
+export function BillingSection({ selectedSchoolId, schoolNamep }: BillingSectionProps) {
   const EXCHANGE_RATE = 300 // USD to PKR
   const { permissions, loading: loadingPermissions } = useSchoolPermissions(selectedSchoolId)
   const [selectedMonth, setSelectedMonth] = useState("")
@@ -67,7 +73,7 @@ export function BillingSection({ selectedSchoolId,schoolNamep }: BillingSectionP
       // Group data by date
       const grouped: GroupedBillingData = {}
       let total = 0
-
+console.log("billing meal data ",data)
       data.forEach((meal: any) => {
         const mealDate = meal.date
         if (!grouped[mealDate]) {
@@ -212,12 +218,12 @@ export function BillingSection({ selectedSchoolId,schoolNamep }: BillingSectionP
       }
 
       // Invoice details section
-      const invoiceDate = new Date().toLocaleDateString("en-US", {
+      const invoiceDate = new Date().toLocaleDateString("en-PK", {
         year: "numeric",
         month: "long",
         day: "numeric",
       })
-      const monthYear = new Date(selectedMonth + "-01").toLocaleDateString("en-US", {
+      const monthYear = new Date(selectedMonth + "-01").toLocaleDateString("en-PK", {
         year: "numeric",
         month: "long",
       })
@@ -300,16 +306,14 @@ export function BillingSection({ selectedSchoolId,schoolNamep }: BillingSectionP
       doc.setTextColor(40, 40, 40)
 
       const sortedDates = Object.entries(groupedBillingData).sort(
-        ([a], [b]) => new Date(a).getTime() - new Date(b).getTime(),
-      )
+        ([a], [b]) => a.localeCompare(b)
+      );
 
       let rowIndex = 0
       for (const [date, data] of sortedDates) {
-        const formattedDate = new Date(date).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        })
-
+        // Use string formatting only, never Date object
+        // Use:
+const formattedDate = new Date(date).toLocaleDateString("en-PK", { month: "short", day: "numeric" })
         // Show each item for this date
         for (let i = 0; i < data.items.length; i++) {
           const item = data.items[i]
@@ -429,16 +433,10 @@ export function BillingSection({ selectedSchoolId,schoolNamep }: BillingSectionP
               </div>
               <CardTitle className="text-[#A2BD9D]">Monthly Billing</CardTitle>
             </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-              <label className="text-sm font-medium whitespace-nowrap">Select Month/Year:</label>
-              <Input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="w-full sm:w-48 border-[#A2BD9D] focus:ring-[#A2BD9D]"
-                placeholder="Select month..."
-              />
-            </div>
+            <BillingMonthSelector
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+            />
           </div>
         </CardHeader>
         <CardContent>
@@ -447,63 +445,16 @@ export function BillingSection({ selectedSchoolId,schoolNamep }: BillingSectionP
               <p className="text-gray-500">Please select a month to view billing details</p>
             </div>
           ) : loading ? (
-            <div className="text-center py-8">Loading billing data...</div>
+            <LoadingOverlay />
           ) : Object.keys(groupedBillingData).length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-500">No meal data found for the selected month</p>
             </div>
           ) : (
             <>
-              <div className="space-y-4">
-                {Object.entries(groupedBillingData)
-                  .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
-                  .map(([date, data]) => (
-                    <div key={date} className="border rounded-lg p-4 bg-white shadow-sm">
-                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
-                        <h3 className="text-base font-semibold text-gray-800">
-                          {new Date(date).toLocaleDateString("en-US", {
-                            weekday: "long",
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}
-                        </h3>
-                        <Badge
-                          variant="outline"
-                          className="text-sm w-fit bg-[#A2BD9D]/10 text-[#A2BD9D] border-[#A2BD9D]/20"
-                        >
-                          Subtotal: ₨{formatCurrency(data.subtotal)}
-                        </Badge>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-[#A2BD9D]/5">
-                              <TableHead className="text-xs font-semibold text-[#A2BD9D]">Item Name</TableHead>
-                              <TableHead className="text-xs font-semibold text-[#A2BD9D]">Unit Price (PKR)</TableHead>
-                              <TableHead className="text-xs font-semibold text-[#A2BD9D]">Quantity</TableHead>
-                              <TableHead className="text-xs font-semibold text-[#A2BD9D]">Total Cost (PKR)</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {data.items.map((item, index) => (
-                              <TableRow key={index} className="hover:bg-[#A2BD9D]/5">
-                                <TableCell className="font-medium text-sm text-gray-800">{item.item_name}</TableCell>
-                                <TableCell className="text-sm text-gray-600">
-                                  ₨{formatCurrency(item.unit_price)}
-                                </TableCell>
-                                <TableCell className="text-sm text-gray-600">{item.quantity}</TableCell>
-                                <TableCell className="text-sm font-medium text-gray-800">
-                                  ₨{formatCurrency(item.total_cost)}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  ))}
-              </div>
+              <BillingTable
+                groupedBillingData={groupedBillingData}
+              />
               <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
                 <Button
                   onClick={handleDownloadClick}
@@ -531,59 +482,15 @@ export function BillingSection({ selectedSchoolId,schoolNamep }: BillingSectionP
       </Card>
 
       {/* Meal Provider Dialog */}
-      <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="bg-white p-1 rounded-md shadow-sm border border-gray-100">
-                <img src="/images/nourished-logo.png" alt="Nourished Education" className="h-6 w-auto" />
-              </div>
-              <DialogTitle className="text-[#A2BD9D]">Generate Invoice</DialogTitle>
-            </div>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="mealProvider" className="text-sm font-medium">
-                Meal Provider Name
-              </Label>
-              <Input
-                id="mealProvider"
-                placeholder="Enter the meal service provider's name"
-                value={mealProviderName}
-                onChange={(e) => setMealProviderName(e.target.value)}
-                className="w-full border-[#A2BD9D]/30 focus:border-[#A2BD9D] focus:ring-[#A2BD9D]/20"
-              />
-              <p className="text-xs text-gray-500">
-                This is the name of the company or individual providing meal services.
-              </p>
-            </div>
-            <div className="bg-[#A2BD9D]/5 border border-[#A2BD9D]/20 p-3 rounded-lg">
-              <p className="text-xs text-gray-700">
-                <strong className="text-[#A2BD9D]">Invoice Details:</strong>
-                <br />• Paying Entity: Nourished Education Inc.
-                <br />• School: {schoolNamep}
-                <br />• Period:{" "}
-                {selectedMonth
-                  ? new Date(selectedMonth + "-01").toLocaleDateString("en-US", { year: "numeric", month: "long" })
-                  : "N/A"}
-                <br />• Purpose: Payment confirmation & cross-check
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowProviderDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={generatePDF}
-              className="bg-[#A2BD9D] hover:bg-[#8FA889]"
-              disabled={!mealProviderName.trim()}
-            >
-              Generate PDF
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <BillingPDFDialog
+        open={showProviderDialog}
+        onOpenChange={setShowProviderDialog}
+        mealProviderName={mealProviderName}
+        setMealProviderName={setMealProviderName}
+        schoolName={schoolNamep}
+        selectedMonth={selectedMonth}
+        onGeneratePDF={generatePDF}
+      />
     </>
-  )
+  );
 }
