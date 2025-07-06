@@ -92,7 +92,7 @@ export function AttendanceReportGenerator({
       }
 
       const attendanceData: AttendanceWithStudent[] = await response.json()
-
+console.log("attendace data for report ",attendanceData)
       // Generate PDF using jsPDF with autoTable
       const jsPDF = (await import("jspdf")).default
       const autoTable = (await import("jspdf-autotable")).default
@@ -135,7 +135,7 @@ export function AttendanceReportGenerator({
       const studentAttendanceMap = new Map<string, AttendanceWithStudent[]>()
 
       attendanceData.forEach((record) => {
-        const studentId = record.students.student_id
+        const studentId = record.student_id
         if (!studentAttendanceMap.has(studentId)) {
           studentAttendanceMap.set(studentId, [])
         }
@@ -144,17 +144,22 @@ export function AttendanceReportGenerator({
 
       // Prepare summary data (excluding Sundays from absence count)
       const summaryData: any[] = []
-
+console.log("student attendance map ",studentAttendanceMap)
       for (const [studentId, studentRecords] of studentAttendanceMap.entries()) {
         if (studentRecords.length === 0) continue
 
-        const student = studentRecords[0].students
+        const student = studentRecords[0]
         // Count absences excluding Sundays
         const totalAbsences = studentRecords.filter(
-          (record) => record.punch_times.length === 0 && !isSunday(record.date),
-        ).length
+  (record) =>
+    (
+      !Array.isArray(record.punch_times) ||
+      record.punch_times.length === 0 ||
+      record.punch_times.includes("nan")
+    ) && !isSunday(record.date)
+).length
 
-        summaryData.push([student.name, totalAbsences.toString()])
+        summaryData.push([student.student_name, totalAbsences.toString()])
       }
 
       // Sort summary data by student name
@@ -215,7 +220,7 @@ export function AttendanceReportGenerator({
 
       // Sort all attendance records by name
      const sortedAttendanceData = [...attendanceData].sort(
-  (a, b) => a.students.name.localeCompare(b.students.name),
+  (a, b) => a.student_name.localeCompare(b.student_name),
   //
 )
 
@@ -223,16 +228,23 @@ export function AttendanceReportGenerator({
       sortedAttendanceData.forEach((record) => {
         if (isSunday(record.date)) return; // Skip Sunday records
         const date = new Date(record.date)
-        const formattedDate = date.toLocaleDateString("en-US", {
+        const formattedDate = date.toLocaleDateString("en-PK", {
           weekday: "short",
           month: "short",
           day: "numeric",
         })
+        const isPresent =
+  Array.isArray(record.punch_times) &&
+  record.punch_times.length > 0 &&
+  !record.punch_times.includes("nan");
 
-        const studentName = record.students.name
-        const status = record.punch_times.length > 0 ? "Present" : "Absent"
-        const punchTime = record.punch_times.length > 0 ? record.punch_times.join(", ") : "-"
-
+//@ts-ignore
+        const studentName = record.student_name
+       const status = isPresent ? "Present" : "Absent";
+const punchTime =
+  isPresent && record.punch_times.length > 0
+    ? record.punch_times.join(", ")
+    : "-";
         detailedData.push([formattedDate, studentName, punchTime, status])
       })
 
@@ -316,7 +328,7 @@ export function AttendanceReportGenerator({
       setGeneratingReport(false)
     }
   }
-
+console.log("students ", filteredStudentsForReport)
   return (
     <>
       <Button
@@ -366,6 +378,7 @@ export function AttendanceReportGenerator({
                         onCheckedChange={() => handleStudentToggle(student.student_id)}
                       />
                       <Label htmlFor={`student-${student.id}`} className="text-sm cursor-pointer flex-1">
+                       {/* //@ts-ignore */}
                         {student.name} ({student.student_id})
                       </Label>
                     </div>

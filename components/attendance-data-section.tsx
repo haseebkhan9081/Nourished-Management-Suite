@@ -98,7 +98,10 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
       setSummary(null)
     }
   }, [selectedSchoolId, selectedMonth, selectedDate, viewMode, sortBy, sortOrder])
-
+const [isMobile, setIsMobile] = useState(false);
+useEffect(() => {
+  setIsMobile(window.innerWidth < 640);
+}, []);
   // Debounced search effect
   useEffect(() => {
     if (searchTimeoutRef.current) {
@@ -119,26 +122,31 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
   }, [searchQuery])
 
   // Set up infinite scroll observer
-  useEffect(() => {
-    if (observerRef.current) observerRef.current.disconnect()
+// Only set up observer if not mobile
+useEffect(() => {
+  if (isMobile) return;
+  if (observerRef.current) observerRef.current.disconnect();
 
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore && viewMode === "month") {
-          loadMoreData()
-        }
-      },
-      { threshold: 1.0 },
-    )
-
-    if (lastElementRef.current) {
-      observerRef.current.observe(lastElementRef.current)
+  observerRef.current = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting && hasMore && !loadingMore && viewMode === "month") {
+        loadMoreData();
+      }
+    },
+    {
+      threshold: 1.0,
+      root: null,
     }
+  );
 
-    return () => {
-      if (observerRef.current) observerRef.current.disconnect()
-    }
-  }, [hasMore, loadingMore, viewMode])
+  if (lastElementRef.current) {
+    observerRef.current.observe(lastElementRef.current);
+  }
+
+  return () => {
+    if (observerRef.current) observerRef.current.disconnect();
+  };
+}, [hasMore, loadingMore, viewMode, isMobile]);
 
   const hasValidFilter = () => {
     if (viewMode === "month") {
@@ -170,7 +178,6 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
       const params = new URLSearchParams({
         school_id: selectedSchoolId.toString(),
         page: page.toString(),
-        limit: "25",
         sortBy,
         sortOrder,
       })
@@ -181,8 +188,10 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
 
       if (viewMode === "month" && selectedMonth) {
         params.append("month", selectedMonth)
+        params.append("limit", "25") // keep pagination for month view
       } else if (viewMode === "date" && selectedDate) {
         params.append("date", selectedDate)
+        params.append("limit", "1000") 
       }
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/attendance?${params.toString()}`)
@@ -193,7 +202,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
       }
 
       const data: AttendanceResponse = await res.json()
-
+console.log("attendace data ",data)
       if (reset) {
         setAttendance(data.data || [])
       } else {
@@ -564,7 +573,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
                         </Select>
 
                         {/* System ID Toggle */}
-                        <Button
+                        {/* <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setShowSystemId(!showSystemId)}
@@ -572,7 +581,7 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
                         >
                           {showSystemId ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                           System ID
-                        </Button>
+                        </Button> */}
                       </div>
                     </div>
                   )}
@@ -850,9 +859,26 @@ export function AttendanceDataSection({ selectedSchoolId }: AttendanceDataSectio
                     </TableBody>
                   </Table>
                 </div>
-
+{isMobile && hasMore && (
+  <div className="flex justify-center items-center py-4 border-t">
+    <Button
+      onClick={loadMoreData}
+      disabled={loadingMore}
+      className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full max-w-xs"
+    >
+      {loadingMore ? (
+        <>
+          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+          Loading...
+        </>
+      ) : (
+        "Load More"
+      )}
+    </Button>
+  </div>
+)}
                 {/* Loading More Indicator */}
-                {loadingMore && (
+                {!isMobile &&loadingMore && (
                   <div className="flex justify-center items-center py-4 border-t">
                     <Loader2 className="h-5 w-5 animate-spin text-[#A2BD9D] mr-2" />
                     <span className="text-sm text-gray-600">Loading more records...</span>
