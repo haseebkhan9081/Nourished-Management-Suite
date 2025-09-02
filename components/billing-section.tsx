@@ -179,7 +179,7 @@ console.log("billing meal data ",data)
         doc.setFontSize(20)
         doc.setFont("helvetica", "bold")
         doc.setTextColor(162, 189, 157) // Primary color for text
-        doc.text("Nourished Education Inc.", logoX + logoWidth + 10, 20)
+        doc.text("Nourished Welfare Trust", logoX + logoWidth + 10, 20)
 
         // Invoice title
         doc.setFontSize(26)
@@ -238,7 +238,7 @@ console.log("billing meal data ",data)
       doc.setFont("helvetica", "bold")
       doc.setFontSize(12)
       doc.setTextColor(40, 40, 40)
-      doc.text("Nourished Education Inc.", margin, yPosition)
+      doc.text("Nourished Welfare Trust", margin, yPosition)
       yPosition += 6
 
       doc.setFont("helvetica", "normal")
@@ -347,13 +347,7 @@ const formattedDate = new Date(date).toLocaleDateString("en-PK", { month: "short
           rowIndex++
         }
 
-        // Day subtotal
-        doc.setFont("helvetica", "bold")
-        doc.setFillColor(245, 245, 245)
-        doc.rect(margin + 110, yPosition - 2, contentWidth - 110, 8, "F")
-        doc.text(`Day Total: PKR ${formatCurrency(data.subtotal)}`, margin + 115, yPosition + 4)
-        doc.setFont("helvetica", "normal")
-        yPosition += 12
+        
       }
 
       // Final total section

@@ -597,7 +597,7 @@ console.log("attendace data ",data)
                     <div>
                       <h4 className="font-semibold text-[#A2BD9D] text-lg">
                         Attendance Summary -{" "}
-                        {new Date(summary.date).toLocaleDateString("en-US", {
+                        {new Date(summary.date).toLocaleDateString("en-PK", {
                           weekday: "long",
                           year: "numeric",
                           month: "long",
