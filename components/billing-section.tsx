@@ -379,7 +379,7 @@ const formattedDate = new Date(date).toLocaleDateString("en-PK", { month: "short
         yPosition,
         { align: "center" },
       )
-      doc.text("Nourished Education Inc. | info@nourishedusa.org", pageWidth / 2, yPosition + 6, {
+      doc.text("Nourished Welfare Trust | info@nourishedusa.org", pageWidth / 2, yPosition + 6, {
         align: "center",
       })
 
@@ -423,7 +423,7 @@ const formattedDate = new Date(date).toLocaleDateString("en-PK", { month: "short
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex items-center gap-3">
               <div className="bg-white p-1 rounded-md shadow-sm">
-                <img src="/images/nourished-logo.png" alt="Nourished Education" className="h-8 w-auto" />
+                <img src="/images/nourished-logo.png" alt="Nourished Welfare Trust" className="h-8 w-auto" />
               </div>
               <CardTitle className="text-[#A2BD9D]">Monthly Billing</CardTitle>
             </div>

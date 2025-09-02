@@ -28,7 +28,7 @@ export function BillingPDFDialog({
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="bg-white p-1 rounded-md shadow-sm border border-gray-100">
-              <img src="/images/nourished-logo.png" alt="Nourished Education" className="h-6 w-auto" />
+              <img src="/images/nourished-logo.png" alt="Nourished Welfare Trust" className="h-6 w-auto" />
             </div>
             <DialogTitle className="text-[#A2BD9D]">Generate Invoice</DialogTitle>
           </div>
@@ -52,7 +52,7 @@ export function BillingPDFDialog({
           <div className="bg-[#A2BD9D]/5 border border-[#A2BD9D]/20 p-3 rounded-lg">
             <p className="text-xs text-gray-700">
               <strong className="text-[#A2BD9D]">Invoice Details:</strong>
-              <br />• Paying Entity: Nourished Education Inc.
+              <br />• Paying Entity: Nourished Welfare Trust
               <br />• School: {schoolName}
               <br />• Period: {selectedMonth ? new Date(selectedMonth + "-01").toLocaleDateString("en-US", { year: "numeric", month: "long" }) : "N/A"}
               <br />• Purpose: Payment confirmation & cross-check
