@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, X, Loader2 } from "lucide-react"
+import { Plus, Trash2, X, Loader2, File, FileText } from "lucide-react"
 import type { Meal, MealItem } from "@/lib/supabase"
 import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 import { LoadingOverlay } from "./LoadingOverlay"
@@ -14,6 +14,8 @@ import { MonthFilter } from "./MonthFilter"
 import { AddMealDayForm } from "./AddMealDayForm"
 import { MealDayList } from "./MealDayList"
 import { calculateMealTotal, fetchMeals as fetchMealsHelper, addMealItem as addMealItemHelper } from "./helpers/mealDataHelpers"
+import { ExcelUploadComponent } from "./excel-upload-component"
+import { ExportMealDataForm } from "./ExportMealDataForm"
 
 interface MealDataSectionProps {
   selectedSchoolId: number | null
@@ -28,7 +30,12 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
   const [editingItem, setEditingItem] = useState<{ mealId: number; itemId?: number } | null>(null)
   const [newItem, setNewItem] = useState({ item_name: "", unit_price: "", quantity: "" })
   const [showNewMealForm, setShowNewMealForm] = useState(false)
+  const [showExportMealDataForm, setShowExportMealDataForm] = useState(false)
   const [newMealDate, setNewMealDate] = useState("")
+  const [exportStartDate,setExportStartDate]=useState("")
+  const [exportEndDate,setExportEndDate]=useState("")
+
+
 
   // Filter states
   const [monthFilter, setMonthFilter] = useState("")
@@ -38,6 +45,25 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
 
   const addMealItem = (mealId: number) =>
     addMealItemHelper(mealId, permissions, newItem, setOperationLoading, setNewItem, setEditingItem, fetchMeals, monthFilter)
+const exportMealData = () => {
+  if (!selectedSchoolId || !exportStartDate || !exportEndDate) return;
+
+  setOperationLoading(true);
+
+  // Build the URL
+  const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/meals/export?schoolId=${selectedSchoolId}&startDate=${exportStartDate}&endDate=${exportEndDate}`;
+
+  // Redirect browser → triggers file download
+  window.location.href = url;
+
+  // Reset UI
+  setExportStartDate("");
+  setExportEndDate("");
+  setShowExportMealDataForm(false);
+
+  setOperationLoading(false);
+};
+
 
   const deleteMealItem = async (itemId: number) => {
     if (!permissions.canDelete) return
@@ -207,15 +233,31 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-[#A2BD9D]">Meal Data</CardTitle>
+           <div className="flex flex-row items-center space-x-4 justify-center">
             {permissions.canCreate && monthFilter && (
               <Button
-                onClick={() => setShowNewMealForm(true)}
+                onClick={() => {
+                  setShowExportMealDataForm(false)
+                  setShowNewMealForm(true)}}
                 className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add New Day
               </Button>
             )}
+            <Button
+                onClick={() => {
+                  setShowNewMealForm(false)
+                  setShowExportMealDataForm(true)
+                  }
+                }
+                className="bg-[#A2BD9D] hover:bg-[#8FA889] w-full sm:w-auto"
+              >
+                
+                <FileText className="h-4 w-4 mr-2" />
+                Export Data
+              </Button>
+              </div>
           </div>
           {/* Month/Year Selector */}
           <MonthFilter
@@ -235,6 +277,21 @@ export function MealDataSection({ selectedSchoolId }: MealDataSectionProps) {
               onCancel={() => {
                 setShowNewMealForm(false)
                 setNewMealDate("")
+              }}
+              disabled={operationLoading}
+            />
+          )}
+          {showExportMealDataForm && (
+            <ExportMealDataForm
+           startDate={exportStartDate}
+           endDate={exportEndDate}
+           setStartDate={setExportStartDate}
+           setEndDate={setExportEndDate}
+           onExport={exportMealData}
+           onCancel={() => {
+                setShowExportMealDataForm(false)
+                setExportEndDate("")
+                setExportStartDate("")
               }}
               disabled={operationLoading}
             />
