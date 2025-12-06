@@ -169,7 +169,7 @@ fetchUsers()
                           
                           <TableCell className="font-medium text-gray-800">{record.name}</TableCell>
                           <TableCell className="text-gray-600">
-                           <GroupSelect
+                            {permissions.canEdit?( <GroupSelect
                            fetchUsers={fetchUsers}
                            id={record.id}
                            selectedClass={record.class_department}
@@ -177,7 +177,10 @@ fetchUsers()
                            groups={groups}
                            loadingGroup={loadingGroups}
                           
-                           />
+                           />):(
+                            <span>{record.class_department||"Not Assigned"}</span>
+                           )}
+                          
                            
                           </TableCell>
                          
