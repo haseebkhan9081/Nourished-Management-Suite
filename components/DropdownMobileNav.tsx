@@ -20,6 +20,7 @@ export function DropdownMobileNav({ value, onChange }: DropdownMobileNavProps) {
           <SelectItem value="billing">Billing</SelectItem>
           <SelectItem value="expenses">Expenses</SelectItem>
           <SelectItem value="schools">Schools</SelectItem>
+          <SelectItem value="users">Users</SelectItem>
         </SelectContent>
       </Select>
     </div>
