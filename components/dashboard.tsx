@@ -11,6 +11,7 @@ import { SchoolManagementSection } from "./school-management-section"
 import { useSchoolPermissions } from "@/hooks/use-school-permissions"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { DropdownMobileNav } from "./DropdownMobileNav"
+import { UserManagementSection } from "./users-management-section"
 
 export function Dashboard() {
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null)
@@ -74,6 +75,9 @@ export function Dashboard() {
           <TabsTrigger value="schools" className="flex-shrink-0 min-w-[90px] data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white text-xs sm:text-sm px-3 py-2 sm:p-3 rounded-md sm:rounded-none">
             Schools
           </TabsTrigger>
+          <TabsTrigger value="users" className="flex-shrink-0 min-w-[90px] data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white text-xs sm:text-sm px-3 py-2 sm:p-3 rounded-md sm:rounded-none">
+            Users
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="meals">
@@ -93,6 +97,9 @@ export function Dashboard() {
         </TabsContent>
         <TabsContent value="schools">
           <SchoolManagementSection />
+        </TabsContent>
+        <TabsContent value="users">
+          <UserManagementSection selectedSchoolId={selectedSchoolId} />
         </TabsContent>
       </Tabs>
     </div>
