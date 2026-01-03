@@ -1,7 +1,7 @@
 "use client"
 
-import type React from "react"
-import { useUser, SignInButton, UserButton } from "@clerk/nextjs"
+import React from "react"
+import { useSession, signIn, signOut } from "next-auth/react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
@@ -12,9 +12,10 @@ interface AuthWrapperProps {
 }
 
 export function AuthWrapper({ children }: AuthWrapperProps) {
-  const { isLoaded, isSignedIn, user } = useUser()
+  const { data: session, status } = useSession()
+  const loading = status === "loading"
 
-  if (!isLoaded) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Loader2 className="h-8 w-8 animate-spin text-[#A2BD9D]" />
@@ -22,7 +23,7 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
     )
   }
 
-  if (!isSignedIn) {
+  if (!session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <Card className="w-full max-w-md">
@@ -32,8 +33,8 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
                 <Image
                   src="/images/nourished-logo.png"
                   alt="Nourished Logo"
-                  layout="fill"
-                  objectFit="contain"
+                  fill
+                  style={{ objectFit: "contain" }}
                 />
               </div>
               <h1 className="text-lg sm:text-2xl font-bold text-gray-900 mb-2">
@@ -43,11 +44,13 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
                 Sign in to access your dashboard
               </p>
             </div>
-            <SignInButton mode="modal" forceRedirectUrl="/" signUpForceRedirectUrl="/">
-              <Button className="w-full bg-[#A2BD9D] hover:bg-[#8FA889] text-white" size="lg">
-                Sign in with Google
-              </Button>
-            </SignInButton>
+            <Button
+              className="w-full bg-[#A2BD9D] hover:bg-[#8FA889] text-white"
+              size="lg"
+              onClick={() => signIn("google", { callbackUrl: "/" })}
+            >
+              Sign in with Google
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -65,8 +68,8 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
                 <Image
                   src="/images/nourished-logo.png"
                   alt="Nourished Logo"
-                  layout="fill"
-                  objectFit="contain"
+                  fill
+                  style={{ objectFit: "contain" }}
                 />
               </div>
               <h1 className="text-sm sm:text-xl font-semibold text-gray-900 truncate">
@@ -74,19 +77,17 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
               </h1>
             </div>
 
-            {/* Right: Welcome Text & User Button */}
+            {/* Right: Welcome Text & Sign Out */}
             <div className="flex items-center space-x-2 sm:space-x-4">
               <span className="hidden sm:block text-sm text-gray-600 truncate max-w-xs">
-                Welcome, {user?.firstName || user?.emailAddresses?.[0]?.emailAddress}
+                Welcome, {session.user?.name || session.user?.email}
               </span>
-              <UserButton
-                afterSignOutUrl="/"
-                appearance={{
-                  elements: {
-                    avatarBox: "h-8 w-8",
-                  },
-                }}
-              />
+              <Button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded"
+              >
+                Sign out
+              </Button>
             </div>
           </div>
         </div>

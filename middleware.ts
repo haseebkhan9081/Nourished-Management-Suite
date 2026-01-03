@@ -1,14 +1,16 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+import { withAuth } from "next-auth/middleware"
 
-const isProtectedRoute = createRouteMatcher(["/dashboard(.*)"])
-
-export default clerkMiddleware((auth, req) => {
-  // Only protect routes if Clerk is properly configured
-  if (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && isProtectedRoute(req)) {
-    auth().protect()
-  }
+export default withAuth({
+  // Protect all routes except login and public pages
+  pages: {
+    signIn: "/login", // redirect here if not authenticated
+  },
+  callbacks: {
+    authorized: ({ token }) => !!token, // allow access if token exists
+  },
 })
 
+// Define which paths the middleware runs on
 export const config = {
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: ["/((?!_next|favicon.ico|login).*)"], // protect everything except _next, favicon, login
 }

@@ -7,22 +7,27 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Plus, Trash2, Users, UserPlus } from "lucide-react"
 import type { School, SchoolAccess } from "@/lib/supabase"
-import { useUser } from "@clerk/nextjs"
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { Role } from "@/lib/permissions"
+import { useSession } from "next-auth/react"
 
-interface ClerkUserInfo {
-  id: string
-  firstName?: string | null
-  lastName?: string | null
-  email?: string
-  imageUrl?: string
-  createdAt?: string
+interface User {
+  email: string
+  name: string | null
+  image_url: string | null
+  provider: string | null
+  provider_id: string | null
+  created_at: string // ISO timestamp
+  updated_at: string // ISO timestamp
 }
 
+
 export function SchoolManagementSection() {
-  const { user } = useUser()
+  const { data: session, status } = useSession()
+  const user = session?.user
+  const userId = session?.user?.email
   const [schools, setSchools] = useState<School[]>([])
   const [loading, setLoading] = useState(false)
   const [showCreateSchoolForm, setShowCreateSchoolForm] = useState(false)
@@ -30,23 +35,24 @@ export function SchoolManagementSection() {
   const [showAccessForm, setShowAccessForm] = useState<number | null>(null)
   const [newAccess, setNewAccess] = useState({ user_id: "", role: "viewer" as Role })
   const [schoolAccess, setSchoolAccess] = useState<{ [schoolId: number]: SchoolAccess[] }>({})
-  const [clerkUsers, setClerkUsers] = useState<ClerkUserInfo[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [loadingUsers, setLoadingUsers] = useState(false)
 
   useEffect(() => {
     if (user) {
       fetchUserSchools()
-      fetchClerkUsers()
+      fetchUsers()
+
     }
   }, [user])
 
-  const fetchClerkUsers = async () => {
+  const fetchUsers = async () => {
     setLoadingUsers(true)
     try {
-      const res = await fetch("/api/clerk-users")
+      const res = await fetch( `${process.env.NEXT_PUBLIC_API_BASE_URL}/user`)
       if (!res.ok) throw new Error("Failed to fetch")
       const users = await res.json()
-      setClerkUsers(users?.users)
+      setUsers(users?.users)
     } catch (error) {
       console.error("Error fetching Clerk users:", error)
     } finally {
@@ -55,11 +61,11 @@ export function SchoolManagementSection() {
   }
 
   const fetchUserSchools = async () => {
-    if (!user?.id) return
+    if (!userId) return
 
     setLoading(true)
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/user-schools?userId=${user.id}`)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/user-schools?userId=${userId}`)
       if (!res.ok) throw new Error("Failed to fetch user schools")
 
       const { accessData, allAccessData } = await res.json()
@@ -86,7 +92,7 @@ export function SchoolManagementSection() {
   }
 
   const createSchool = async () => {
-    if (!user?.id || !newSchool.name) return
+    if (!userId || !newSchool.name) return
 
     try {
      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/schools/create`, {
@@ -98,7 +104,7 @@ export function SchoolManagementSection() {
         body: JSON.stringify({
           name: newSchool.name,
           address: newSchool.address,
-          user_id: user.id,
+          user_id: userId,
         }),
       })
 
@@ -187,7 +193,7 @@ export function SchoolManagementSection() {
   }
 
   const getUserRole = (schoolId: number) => {
-    const access = schoolAccess[schoolId]?.find((a) => a.user_id === user?.id)
+    const access = schoolAccess[schoolId]?.find((a) => a.user_id === user?.email)
     return access?.role || "viewer"
   }
 
@@ -196,35 +202,29 @@ export function SchoolManagementSection() {
   }
 
   const getUserDisplayName = (userId: string) => {
-    const userInfo = clerkUsers?.find((u) => u.id === userId)
+    const userInfo = users?.find((u) => u.email === userId)
     if (userInfo) {
-      if (userInfo.firstName && userInfo.lastName) {
-        return `${userInfo.firstName} ${userInfo.lastName}`
-      } else if (userInfo.firstName) {
-        return userInfo.firstName
-      } else if (userInfo.email) {
-        return userInfo.email
-      }
+     return userInfo.name
     }
     return userId.substring(0, 12) + "..."
   }
 
   const getUserEmail = (userId: string) => {
-    const userInfo = clerkUsers?.find((u) => u.id === userId)
+    const userInfo = users?.find((u) => u.email === userId)
     return userInfo?.email || "No email"
   }
 
   const getUserAvatar = (userId: string) => {
-    const userInfo = clerkUsers?.find((u) => u.id === userId)
-    return userInfo?.imageUrl || ""
+    const userInfo = users?.find((u) => u.email === userId)
+    return userInfo?.image_url || ""
   }
 
   const getUserInitials = (userId: string) => {
-    const userInfo = clerkUsers?.find((u) => u.id === userId)
-    if (userInfo?.firstName && userInfo?.lastName) {
-      return `${userInfo.firstName[0]}${userInfo.lastName[0]}`.toUpperCase()
-    } else if (userInfo?.firstName) {
-      return userInfo.firstName[0].toUpperCase()
+    const userInfo = users?.find((u) => u.email === userId)
+    if (userInfo?.name) {
+      return `${userInfo.name[0]}`.toUpperCase()
+    } else if (userInfo?.name) {
+      return userInfo.name[0].toUpperCase()
     } else if (userInfo?.email) {
       return userInfo.email[0].toUpperCase()
     }
@@ -347,22 +347,22 @@ export function SchoolManagementSection() {
                             <SelectContent>
                               {loadingUsers ? (
                                 <div className="p-2 text-center">Loading users...</div>
-                              ) : clerkUsers.length === 0 ? (
+                              ) : users.length === 0 ? (
                                 <div className="p-2 text-center">No users found</div>
                               ) : (
-                                clerkUsers.map((clerkUser) => (
-                                  <SelectItem key={clerkUser.id} value={clerkUser.id}>
+                                users.map((user) => (
+                                  <SelectItem key={user.email} value={user.email}>
                                     <div className="flex items-center gap-2">
                                       <Avatar className="h-6 w-6">
-                                        <AvatarImage src={clerkUser.imageUrl || "/placeholder.svg"} />
+                                        <AvatarImage src={user.image_url || "/placeholder.svg"} />
                                         <AvatarFallback>
-                                          {clerkUser.firstName?.[0] || clerkUser.email?.[0] || "U"}
+                                          {user.name?.[0] || user.email?.[0] || "U"}
                                         </AvatarFallback>
                                       </Avatar>
                                       <span>
-                                        {clerkUser.firstName && clerkUser.lastName
-                                          ? `${clerkUser.firstName} ${clerkUser.lastName}`
-                                          : clerkUser.email || clerkUser.id.substring(0, 8)}
+                                        {user.name  
+                                          ? `${user.name}`
+                                          : user.email || user.email.substring(0, 8)}
                                       </span>
                                     </div>
                                   </SelectItem>
@@ -456,7 +456,7 @@ export function SchoolManagementSection() {
                                 </TableCell>
                                 {canManageAccess(school.id) && (
                                   <TableCell>
-                                    {access.user_id !== user?.id && (
+                                    {access.user_id !== user?.email && (
                                       <Button
                                         size="sm"
                                         variant="destructive"

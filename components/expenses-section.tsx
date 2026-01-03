@@ -16,7 +16,7 @@ interface ExpensesSectionProps {
 
 export function ExpensesSection({ selectedSchoolId }: ExpensesSectionProps) {
   const { permissions, loading: loadingPermissions } = useSchoolPermissions(selectedSchoolId)
-  const { user } = useUser()
+
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(false)
   const [operationLoading, setOperationLoading] = useState(false) // New state for operation loading
