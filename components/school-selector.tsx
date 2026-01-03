@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { supabase, type School } from "@/lib/supabase"
 import { useUser } from "@clerk/nextjs"
+import { useSession } from "next-auth/react"
 
 interface SchoolSelectorProps {
   selectedSchoolId: number | null
@@ -12,7 +13,9 @@ interface SchoolSelectorProps {
 }
 
 export function SchoolSelector({ selectedSchoolId, onSchoolChange,setSelectedSchoolName }: SchoolSelectorProps) {
-  const { user } = useUser()
+  const { data: session, status } = useSession()
+  const userId = session?.user?.email 
+  const user = session?.user
   const [schools, setSchools] = useState<School[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -23,11 +26,11 @@ export function SchoolSelector({ selectedSchoolId, onSchoolChange,setSelectedSch
   }, [user])
 
  const fetchUserSchools = async () => {
-  if (!user?.id) return
+  if (!userId) return
 
   setLoading(true)
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/user-schools?userId=${user.id}`)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/user-schools?userId=${userId}`)
     if (!res.ok) {
       const data = await res.json()
       throw new Error(data.error || "Failed to fetch user schools")
