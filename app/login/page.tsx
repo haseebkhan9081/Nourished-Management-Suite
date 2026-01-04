@@ -1,13 +1,16 @@
 //@ts-nocheck
 "use client"
-
+ 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { signIn } from "next-auth/react"
+import { signIn  } from "next-auth/react"
 import Image from "next/image"
 
-
+import { useSearchParams } from "next/navigation"
 export default function LoginPage() {
+    const searchParams = useSearchParams()
+  const callbackUrl =
+    searchParams.get("callbackUrl") ?? "/"
   return (
      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <Card className="w-full max-w-md">
@@ -32,7 +35,7 @@ export default function LoginPage() {
             <Button
               className="w-full bg-[#A2BD9D] hover:bg-[#8FA889] text-white"
               size="lg"
-              onClick={() => signIn("google", { callbackUrl: "/" })}
+              onClick={() => signIn("google", { callbackUrl:callbackUrl })}
             >
               Sign in with Google
             </Button>
