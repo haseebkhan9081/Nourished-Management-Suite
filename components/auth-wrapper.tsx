@@ -4,7 +4,7 @@ import React from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2 } from "lucide-react"
+import { Loader2, LogOut } from "lucide-react"
 import Image from "next/image"
 
 interface AuthWrapperProps {
@@ -83,11 +83,14 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
                 Welcome, {session.user?.name || session.user?.email}
               </span>
               <Button
-                onClick={() => signOut({ callbackUrl: "/login" })}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded"
-              >
-                Sign out
-              </Button>
+    variant="outline"
+    size="sm"
+    onClick={() => signOut({ callbackUrl: "/login" })}
+    className="flex items-center gap-1.5 h-9 px-3"
+  >
+    <LogOut size={16} />
+    <span className="hidden sm:inline">Sign out</span>
+  </Button>
             </div>
           </div>
         </div>
