@@ -6,7 +6,8 @@ import { fetchUserPermissions } from "@/lib/fetchPermissions"
 import { Loader2, UserPlus, UserPlus2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { User, Settings, LogOut } from "lucide-react"
+import { User, Settings, LogOut,DatabaseZap } from "lucide-react"
+import { UploadTransactionModal } from "./components/UploadTransactionModal"
 import { ManageAccessModal } from "./components/ManageAccessModal"
 interface PaymentInsightsLayoutProps {
   children: React.ReactNode
@@ -14,6 +15,7 @@ interface PaymentInsightsLayoutProps {
 
 export default function PaymentInsightsLayout({ children }: PaymentInsightsLayoutProps) {
     const [open, setOpen] = useState(false)
+    const [uploadOpen, setUploadOpen] = useState(false)
   const { data: session, status } = useSession()
   const [permissions, setPermissions] = useState<string[] | null>(null)
 
@@ -88,6 +90,21 @@ export default function PaymentInsightsLayout({ children }: PaymentInsightsLayou
      <ManageAccessModal open={open} onClose={() => setOpen(false)} />
      </>
   )}
+
+  {permissions.includes("payment_insights:manage_users") && (
+  <>
+    <Button
+      size="sm"
+      className="flex items-center gap-1.5 bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-9 px-3"
+      onClick={() => setUploadOpen(true)}
+    >
+      <DatabaseZap size={16} />
+      <span className="hidden sm:inline">Add Transaction Data</span>
+    </Button>
+    {/* Upload Transaction Modal */}
+    <UploadTransactionModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+  </>
+)}
 
   {/* Sign Out */}
   <Button
