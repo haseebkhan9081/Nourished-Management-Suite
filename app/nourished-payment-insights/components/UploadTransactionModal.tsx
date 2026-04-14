@@ -270,29 +270,50 @@ export function UploadTransactionModal({ open, onClose }: Props) {
     </div>
   )
 // here we will show the success message and the warnings and a close button
-  const renderSuccess = (warnings: string[]) => (
-    <div className="space-y-4">
-      <div className="flex flex-col items-center justify-center py-10 gap-3">
-        <CheckCircle2 size={46} className="text-[#A2BD9D]" />
-        <p className="text-base font-semibold text-gray-800">Upload Successful</p>
-        <div className="text-sm text-gray-500 text-center max-w-sm mx-auto">
-          {rows.length} transaction{rows.length !== 1 ? "s" : ""} have been saved to the database.
-          {warnings.length > 0 && (
-            <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-              <h4 className="font-semibold text-yellow-800 text-sm mb-2">Warnings ({warnings.length})</h4>
-              <div className="max-h-32 overflow-y-auto">
-                <ul className="text-xs text-yellow-700 list-disc pl-5 space-y-1">
-                  {warnings.map((warning, index) => (
-                    <li key={index}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
+  const renderSuccess = (warnings: string[]) => {
+    const skipped = warnings.length
+    const inserted = Math.max(rows.length - skipped, 0)
+    const allSkipped = inserted === 0 && skipped > 0
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col items-center justify-center py-10 gap-3">
+          <CheckCircle2 size={46} className={allSkipped ? "text-yellow-500" : "text-[#A2BD9D]"} />
+          <p className="text-base font-semibold text-gray-800">
+            {allSkipped ? "Nothing New to Import" : "Upload Successful"}
+          </p>
+          <div className="text-sm text-gray-500 text-center max-w-sm mx-auto">
+            <div className="flex items-center justify-center gap-4 mb-1">
+              <span>
+                <span className="font-semibold text-[#A2BD9D]">{inserted}</span> new
+              </span>
+              <span className="text-gray-300">|</span>
+              <span>
+                <span className="font-semibold text-yellow-600">{skipped}</span> duplicate{skipped !== 1 ? "s" : ""} skipped
+              </span>
+              <span className="text-gray-300">|</span>
+              <span>
+                <span className="font-semibold text-gray-700">{rows.length}</span> total
+              </span>
             </div>
-          )}
+            {skipped > 0 && (
+              <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-left">
+                <h4 className="font-semibold text-yellow-800 text-sm mb-2">
+                  Duplicates skipped ({skipped})
+                </h4>
+                <div className="max-h-40 overflow-y-auto">
+                  <ul className="text-xs text-yellow-700 list-disc pl-5 space-y-1">
+                    {warnings.map((warning, index) => (
+                      <li key={index} className="break-words">{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const renderError = () => (
     <div className="space-y-4">
