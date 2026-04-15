@@ -6,8 +6,9 @@ import { fetchUserPermissions } from "@/lib/fetchPermissions"
 import { Loader2, UserPlus, UserPlus2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { User, Settings, LogOut,DatabaseZap } from "lucide-react"
+import { User, Settings, LogOut,DatabaseZap, Heart } from "lucide-react"
 import { UploadTransactionModal } from "./components/UploadTransactionModal"
+import { UploadBenevityModal } from "./components/UploadBenevityModal"
 import { ManageAccessModal } from "./components/ManageAccessModal"
 interface PaymentInsightsLayoutProps {
   children: React.ReactNode
@@ -16,6 +17,7 @@ interface PaymentInsightsLayoutProps {
 export default function PaymentInsightsLayout({ children }: PaymentInsightsLayoutProps) {
     const [open, setOpen] = useState(false)
     const [uploadOpen, setUploadOpen] = useState(false)
+    const [benevityOpen, setBenevityOpen] = useState(false)
   const { data: session, status } = useSession()
   const [permissions, setPermissions] = useState<string[] | null>(null)
 
@@ -103,6 +105,17 @@ export default function PaymentInsightsLayout({ children }: PaymentInsightsLayou
     </Button>
     {/* Upload Transaction Modal */}
     <UploadTransactionModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+
+    <Button
+      size="sm"
+      variant="outline"
+      className="flex items-center gap-1.5 h-9 px-3 border-[#A2BD9D] text-[#5a7a55] hover:bg-[#A2BD9D]/10"
+      onClick={() => setBenevityOpen(true)}
+    >
+      <Heart size={16} />
+      <span className="hidden sm:inline">Upload Benevity</span>
+    </Button>
+    <UploadBenevityModal open={benevityOpen} onClose={() => setBenevityOpen(false)} />
   </>
 )}
 

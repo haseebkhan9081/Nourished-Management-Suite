@@ -538,6 +538,18 @@ export default function NourishedPaymentInsightsPage() {
           >
             Stripe
           </a>
+          <a
+            href="/nourished-payment-insights/benevity"
+            className="px-4 py-1.5 text-sm font-medium rounded-full bg-[#A2BD9D] text-white hover:bg-[#8FA889] transition shadow-sm"
+          >
+            Benevity
+          </a>
+          <a
+            href="/nourished-payment-insights/donor-report"
+            className="px-4 py-1.5 text-sm font-medium rounded-full bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-sm"
+          >
+            Donor Report
+          </a>
         </div>
       </div>
 
