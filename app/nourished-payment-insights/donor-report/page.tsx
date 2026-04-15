@@ -3,7 +3,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import * as XLSX from "xlsx"
+import * as XLSX from "xlsx-js-style"
 import { ArrowLeft, Download, Loader2, Calendar } from "lucide-react"
 
 interface DonorRow {
@@ -79,41 +79,213 @@ export default function DonorReportPage() {
   const downloadExcel = () => {
     if (!data) return
 
-    const rows: (string | number)[][] = []
-    // Header row
-    const header = ["Donor", "Email", ...data.months.map(formatMonthLabel), "Total"]
-    rows.push(header)
+    // ── Style library ──────────────────────────────────────────────────────
+    const CURRENCY_FMT = '"$"#,##0;[Red]-"$"#,##0;"—"'
+    const border = { top: { style: "thin", color: { rgb: "E5E7EB" } },
+                     bottom: { style: "thin", color: { rgb: "E5E7EB" } },
+                     left: { style: "thin", color: { rgb: "E5E7EB" } },
+                     right: { style: "thin", color: { rgb: "E5E7EB" } } }
 
-    // Section by section
-    for (const section of data.sections) {
-      rows.push([]) // spacer
-      rows.push([section.name, ...Array(data.months.length + 2).fill("")])
-      for (const d of section.donors) {
-        rows.push([
-          d.name,
-          d.email ?? "",
-          ...data.months.map(m => d.monthly[m] ?? 0),
-          d.total,
-        ])
-      }
-      rows.push([
-        `${section.name} — Total`,
-        "",
-        ...data.months.map(m => section.sectionTotals[m] ?? 0),
-        section.sectionTotal,
-      ])
+    const titleStyle = {
+      font: { bold: true, sz: 16, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "A2BD9D" } },
+      alignment: { horizontal: "left", vertical: "center" },
+    }
+    const metaStyle = {
+      font: { sz: 10, color: { rgb: "6B7280" } },
+      alignment: { horizontal: "left", vertical: "center" },
+    }
+    const headerStyle = {
+      font: { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "5A7A55" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border,
+    }
+    const headerLeftStyle = { ...headerStyle, alignment: { horizontal: "left", vertical: "center" } }
+    const sectionHeaderStyle = {
+      font: { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "8FA889" } },
+      alignment: { horizontal: "left", vertical: "center" },
+    }
+    const donorNameStyle = {
+      font: { sz: 10, color: { rgb: "1F2937" } },
+      alignment: { horizontal: "left", vertical: "center" },
+      border,
+    }
+    const donorEmailStyle = {
+      font: { sz: 9, color: { rgb: "6B7280" } },
+      alignment: { horizontal: "left", vertical: "center" },
+      border,
+    }
+    const donorAmountStyle = {
+      font: { sz: 10, color: { rgb: "1F2937" } },
+      alignment: { horizontal: "right", vertical: "center" },
+      numFmt: CURRENCY_FMT,
+      border,
+    }
+    const donorTotalStyle = {
+      font: { bold: true, sz: 10, color: { rgb: "5A7A55" } },
+      alignment: { horizontal: "right", vertical: "center" },
+      numFmt: CURRENCY_FMT,
+      fill: { fgColor: { rgb: "F5F9F3" } },
+      border,
+    }
+    const sectionTotalLabelStyle = {
+      font: { bold: true, sz: 10, color: { rgb: "1F2937" } },
+      alignment: { horizontal: "left", vertical: "center" },
+      fill: { fgColor: { rgb: "F3F4F6" } },
+      border,
+    }
+    const sectionTotalAmountStyle = {
+      font: { bold: true, sz: 10, color: { rgb: "1F2937" } },
+      alignment: { horizontal: "right", vertical: "center" },
+      numFmt: CURRENCY_FMT,
+      fill: { fgColor: { rgb: "F3F4F6" } },
+      border,
+    }
+    const grandTotalLabelStyle = {
+      font: { bold: true, sz: 12, color: { rgb: "FFFFFF" } },
+      alignment: { horizontal: "left", vertical: "center" },
+      fill: { fgColor: { rgb: "111827" } },
+      border,
+    }
+    const grandTotalAmountStyle = {
+      font: { bold: true, sz: 12, color: { rgb: "FFFFFF" } },
+      alignment: { horizontal: "right", vertical: "center" },
+      numFmt: CURRENCY_FMT,
+      fill: { fgColor: { rgb: "111827" } },
+      border,
+    }
+    const noteStyle = {
+      font: { italic: true, sz: 9, color: { rgb: "9CA3AF" } },
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
     }
 
-    // Grand total
-    rows.push([])
-    rows.push([
-      "GRAND TOTAL",
-      "",
-      ...data.months.map(m => data.grandTotals[m] ?? 0),
-      data.grandTotal,
-    ])
+    // ── Build sheet cell-by-cell so each cell can carry its own style ──────
+    const totalCols = data.months.length + 3 // Donor + Email + months + Total
+    const ws: Record<string, any> = {}
+    const merges: XLSX.Range[] = []
+    let r = 0 // current row index
 
-    const ws = XLSX.utils.aoa_to_sheet(rows)
+    const setCell = (row: number, col: number, value: any, style?: any) => {
+      const ref = XLSX.utils.encode_cell({ r: row, c: col })
+      const isNum = typeof value === "number"
+      ws[ref] = { t: isNum ? "n" : "s", v: value, s: style }
+    }
+
+    // Row 0: Title (merged across all columns)
+    setCell(r, 0, "Donor Report", titleStyle)
+    for (let c = 1; c < totalCols; c++) setCell(r, c, "", titleStyle)
+    merges.push({ s: { r, c: 0 }, e: { r, c: totalCols - 1 } })
+    r++
+
+    // Row 1: Period
+    setCell(r, 0, `Period: ${formatMonthLabel(data.start)} – ${formatMonthLabel(data.end)}`, metaStyle)
+    for (let c = 1; c < totalCols; c++) setCell(r, c, "", metaStyle)
+    merges.push({ s: { r, c: 0 }, e: { r, c: totalCols - 1 } })
+    r++
+
+    // Row 2: Generated timestamp
+    setCell(r, 0, `Generated: ${new Date().toLocaleString("en-US")}`, metaStyle)
+    for (let c = 1; c < totalCols; c++) setCell(r, c, "", metaStyle)
+    merges.push({ s: { r, c: 0 }, e: { r, c: totalCols - 1 } })
+    r++
+
+    // Row 3: Summary line
+    const totalDonors = data.sections.reduce((n, s) => n + s.donors.length, 0)
+    setCell(r, 0, `${totalDonors} unique donors · ${data.months.length} month${data.months.length !== 1 ? "s" : ""} · grand total $${Math.round(data.grandTotal).toLocaleString()}`, metaStyle)
+    for (let c = 1; c < totalCols; c++) setCell(r, c, "", metaStyle)
+    merges.push({ s: { r, c: 0 }, e: { r, c: totalCols - 1 } })
+    r++
+
+    // Spacer row
+    r++
+
+    // Column header row
+    const headerRow = r
+    setCell(r, 0, "Donor", headerLeftStyle)
+    setCell(r, 1, "Email", headerLeftStyle)
+    data.months.forEach((m, i) => setCell(r, 2 + i, formatMonthLabel(m), headerStyle))
+    setCell(r, totalCols - 1, "Total", headerStyle)
+    r++
+
+    // Sections
+    for (const section of data.sections) {
+      // Section header row (merged)
+      const donorCount = section.donors.length
+      const sectionLabel = `${section.name}  ·  ${donorCount} donor${donorCount !== 1 ? "s" : ""}`
+      setCell(r, 0, sectionLabel, sectionHeaderStyle)
+      for (let c = 1; c < totalCols; c++) setCell(r, c, "", sectionHeaderStyle)
+      merges.push({ s: { r, c: 0 }, e: { r, c: totalCols - 1 } })
+      r++
+
+      // Section note (optional)
+      if (section.note) {
+        setCell(r, 0, section.note, noteStyle)
+        for (let c = 1; c < totalCols; c++) setCell(r, c, "", noteStyle)
+        merges.push({ s: { r, c: 0 }, e: { r, c: totalCols - 1 } })
+        r++
+      }
+
+      // Donor rows
+      for (const d of section.donors) {
+        setCell(r, 0, d.name, donorNameStyle)
+        setCell(r, 1, d.email ?? "", donorEmailStyle)
+        data.months.forEach((m, i) => {
+          const amt = d.monthly[m] ?? 0
+          setCell(r, 2 + i, amt === 0 ? "" : amt, donorAmountStyle)
+        })
+        setCell(r, totalCols - 1, d.total, donorTotalStyle)
+        r++
+      }
+
+      // Section subtotal row
+      setCell(r, 0, `${section.name} — Subtotal`, sectionTotalLabelStyle)
+      setCell(r, 1, "", sectionTotalLabelStyle)
+      data.months.forEach((m, i) => {
+        const amt = section.sectionTotals[m] ?? 0
+        setCell(r, 2 + i, amt === 0 ? "" : amt, sectionTotalAmountStyle)
+      })
+      setCell(r, totalCols - 1, section.sectionTotal, sectionTotalAmountStyle)
+      r++
+
+      // Spacer between sections
+      r++
+    }
+
+    // Grand total row
+    setCell(r, 0, "GRAND TOTAL", grandTotalLabelStyle)
+    setCell(r, 1, "", grandTotalLabelStyle)
+    data.months.forEach((m, i) => {
+      const amt = data.grandTotals[m] ?? 0
+      setCell(r, 2 + i, amt === 0 ? "" : amt, grandTotalAmountStyle)
+    })
+    setCell(r, totalCols - 1, data.grandTotal, grandTotalAmountStyle)
+    const grandTotalRow = r
+    r++
+
+    // Sheet bounds
+    ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: r - 1, c: totalCols - 1 } })
+    ws["!merges"] = merges
+
+    // Column widths (auto-ish: donor + email wider, months + total fixed)
+    ws["!cols"] = [
+      { wch: 32 },        // Donor
+      { wch: 30 },        // Email
+      ...data.months.map(() => ({ wch: 14 })), // Months
+      { wch: 16 },        // Total
+    ]
+
+    // Row heights
+    ws["!rows"] = []
+    ws["!rows"][0] = { hpt: 28 }   // title row taller
+    ws["!rows"][headerRow] = { hpt: 22 }
+    ws["!rows"][grandTotalRow] = { hpt: 24 }
+
+    // Freeze header row and first 2 columns
+    ws["!freeze"] = { xSplit: 2, ySplit: headerRow + 1 }
+    ;(ws as any)["!views"] = [{ state: "frozen", ySplit: headerRow + 1, xSplit: 2 }]
+
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Donor Report")
     const filename = `donor-report-${data.start}-to-${data.end}.xlsx`
