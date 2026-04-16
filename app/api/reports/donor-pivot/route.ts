@@ -76,17 +76,17 @@ function classifyBankRow(details: string): { section: string; donor: string } | 
   }
 
   // Named direct transfers — "ONLINE TRANSFER FROM X", "Transfer in Branch - From X"
-  const onlineFrom = details.match(/ONLINE TRANSFER FROM ([^R]+?)(?:REF|EVERYDAY|$)/i)
+  const onlineFrom = details.match(/ONLINE TRANSFER FROM (.+?)(?:\s+REF\b|\s+EVERYDAY\b|\s*$)/i)
   if (onlineFrom) {
     const name = onlineFrom[1].trim().replace(/\s+/g, " ")
     return { section: "Wells Fargo — Named Donors", donor: titleCase(name) }
   }
-  const branchFrom = details.match(/Transfer in Branch - From ([^D]+?)(?:DDA|$)/i)
+  const branchFrom = details.match(/Transfer in Branch - From (.+?)(?:\s+DDA\b|\s*$)/i)
   if (branchFrom) {
     const name = branchFrom[1].trim().replace(/\s+/g, " ")
     return { section: "Wells Fargo — Named Donors", donor: titleCase(name) }
   }
-  const zelleFrom = details.match(/ZELLE FROM ([^O]+?)(?:ON|$)/i)
+  const zelleFrom = details.match(/ZELLE FROM (.+?)(?:\s+ON\s+\d|\s*$)/i)
   if (zelleFrom) {
     const name = zelleFrom[1].trim().replace(/\s+/g, " ")
     return { section: "Wells Fargo — Named Donors", donor: titleCase(name) }

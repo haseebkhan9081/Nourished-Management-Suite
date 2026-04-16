@@ -26,3 +26,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /lib/generated/prisma
+
+# macOS
+.DS_Store
+
+# local financial data (never commit)
+scripts/*.csv
