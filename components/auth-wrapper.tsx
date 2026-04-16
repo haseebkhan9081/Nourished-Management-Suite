@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2, LogOut } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
+import { ModuleSwitcher } from "@/components/module-switcher"
 
 interface AuthWrapperProps {
   children: React.ReactNode
@@ -62,19 +64,21 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-14 sm:h-16">
-            {/* Left: Logo and Title */}
-            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-              <div className="w-8 h-8 sm:w-12 sm:h-12 relative">
-                <Image
-                  src="/images/nourished-logo.png"
-                  alt="Nourished Logo"
-                  fill
-                  style={{ objectFit: "contain" }}
-                />
-              </div>
-              <h1 className="text-sm sm:text-xl font-semibold text-gray-900 truncate">
-                Nourished Management Suite
-              </h1>
+            {/* Left: Brand + Module Switcher */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <Link href="/" aria-label="Go to home" className="flex items-center gap-2 flex-shrink-0">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 relative">
+                  <Image
+                    src="/images/nourished-logo.png"
+                    alt="Nourished Logo"
+                    fill
+                    style={{ objectFit: "contain" }}
+                  />
+                </div>
+                <span className="hidden sm:inline text-sm font-semibold text-gray-700">Nourished</span>
+              </Link>
+              <span className="hidden sm:inline text-gray-300 select-none">/</span>
+              <ModuleSwitcher fallbackLabel="Dashboard" />
             </div>
 
             {/* Right: Welcome Text & Sign Out */}

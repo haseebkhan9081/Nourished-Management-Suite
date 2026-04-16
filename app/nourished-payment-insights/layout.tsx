@@ -10,6 +10,8 @@ import { User, Settings, LogOut,DatabaseZap, Heart } from "lucide-react"
 import { UploadTransactionModal } from "./components/UploadTransactionModal"
 import { UploadBenevityModal } from "./components/UploadBenevityModal"
 import { ManageAccessModal } from "./components/ManageAccessModal"
+import { ModuleSwitcher } from "@/components/module-switcher"
+import Link from "next/link"
 interface PaymentInsightsLayoutProps {
   children: React.ReactNode
 }
@@ -57,18 +59,20 @@ export default function PaymentInsightsLayout({ children }: PaymentInsightsLayou
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-14 sm:h-16">
-            {/* Left: Logo and Title */}
-            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-              <div className="w-8 h-8 sm:w-12 sm:h-12 relative">
-                <img
-                  src="/images/nourished-logo.png"
-                  alt="Nourished Logo"
-                  className="object-contain w-full h-full"
-                />
-              </div>
-              <h1 className="text-sm sm:text-xl font-semibold text-gray-900 truncate">
-                Nourished Payment Insights
-              </h1>
+            {/* Left: Brand + Module Switcher */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <Link href="/" aria-label="Go to home" className="flex items-center gap-2 flex-shrink-0">
+                <div className="w-8 h-8 sm:w-10 sm:h-10">
+                  <img
+                    src="/images/nourished-logo.png"
+                    alt="Nourished Logo"
+                    className="object-contain w-full h-full"
+                  />
+                </div>
+                <span className="hidden sm:inline text-sm font-semibold text-gray-700">Nourished</span>
+              </Link>
+              <span className="hidden sm:inline text-gray-300 select-none">/</span>
+              <ModuleSwitcher fallbackLabel="Payment Insights" />
             </div>
 
             {/* Right: Welcome Text, Manage Access, Sign Out */}

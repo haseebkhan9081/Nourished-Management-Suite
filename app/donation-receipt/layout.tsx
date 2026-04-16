@@ -4,6 +4,8 @@ import { useSession, signOut } from "next-auth/react"
 import { Loader2, LogOut } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { ModuleSwitcher } from "@/components/module-switcher"
+import Link from "next/link"
 
 interface DonationReceiptsLayoutProps {
   children: React.ReactNode
@@ -44,19 +46,20 @@ export default function DonationReceiptsLayout({ children }: DonationReceiptsLay
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-14 sm:h-16">
 
-            {/* Logo + Title */}
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 sm:w-12 sm:h-12">
-                <img
-                  src="/images/nourished-logo.png"
-                  alt="Nourished Logo"
-                  className="object-contain w-full h-full"
-                />
-              </div>
-
-              <h1 className="text-sm sm:text-xl font-semibold text-gray-900">
-                Donation Receipt Sender
-              </h1>
+            {/* Brand + Module Switcher */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <Link href="/" aria-label="Go to home" className="flex items-center gap-2 flex-shrink-0">
+                <div className="w-8 h-8 sm:w-10 sm:h-10">
+                  <img
+                    src="/images/nourished-logo.png"
+                    alt="Nourished Logo"
+                    className="object-contain w-full h-full"
+                  />
+                </div>
+                <span className="hidden sm:inline text-sm font-semibold text-gray-700">Nourished</span>
+              </Link>
+              <span className="hidden sm:inline text-gray-300 select-none">/</span>
+              <ModuleSwitcher fallbackLabel="Donation Receipts" />
             </div>
 
             {/* Right side */}
