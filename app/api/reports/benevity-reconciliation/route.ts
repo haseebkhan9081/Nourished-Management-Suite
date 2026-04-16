@@ -23,11 +23,12 @@ interface BankTx {
 
 function extractDisbursementId(details: string): string | null {
   if (!details) return null
-  // Patterns seen in Wells Fargo CSV for AOG deposits:
-  //   "AMER ONLINE GIV1 EDI PAYMNT APR 07 1TFNDRKDW4 REF*TN*1TFNDRKDW4*Donation..."
-  // The ref code is a 10-char alphanumeric that appears after REF*TN* or directly
+  // Benevity / AOG pattern: REF*TN*XXXXXXXXXX
   const refTn = details.match(/REF\*TN\*([A-Z0-9]+)/i)
   if (refTn) return refTn[1].toUpperCase()
+  // CyberGrants pattern: ACH_XXXXXXX (appears inline in CYBERGRANT bank rows)
+  const ach = details.match(/ACH_?(\d+)/i)
+  if (ach) return `ACH_${ach[1]}`
   // Fallback: look for AMER ONLINE GIV followed by ref code
   const aog = details.match(/AMER ONLINE GIV[^\s]*\s+\S+\s+\S+\s+\S+\s+([A-Z0-9]{8,})/i)
   if (aog) return aog[1].toUpperCase()
@@ -65,33 +66,34 @@ export async function GET(_request: Request) {
     console.error("Bank transactions fetch failed:", err?.message ?? err)
   }
 
-  // Filter bank transactions to AMER ONLINE GIV credits
-  const aogBankRows = bankTxns
+  // Filter bank transactions to the corporate-giving pipeline: Benevity AOG
+  // AND CyberGrants. Both flow into the same benevity_donation table so they
+  // reconcile against the same disbursement set.
+  const platformBankRows = bankTxns
     .filter(tx => {
       const d = (tx.details ?? "").toUpperCase()
-      return d.includes("AMER ONLINE GIV") && Number(tx.amount) > 0
+      if (Number(tx.amount) <= 0) return false
+      return d.includes("AMER ONLINE GIV")
+          || d.includes("CYBERGRANT")
+          || d.includes("REF*TN*")
+          || d.includes("BENEV")
     })
-    .map(tx => ({
-      id: tx.id,
-      date: typeof tx.date === "string" ? tx.date.split("T")[0] : String(tx.date),
-      amount: Number(tx.amount),
-      details: tx.details ?? "",
-      disbursementId: extractDisbursementId(tx.details ?? ""),
-    }))
+    .map(tx => {
+      const d = (tx.details ?? "").toUpperCase()
+      const platform: "aog" | "cybergrants" =
+        d.includes("CYBERGRANT") ? "cybergrants" : "aog"
+      return {
+        id: tx.id,
+        date: typeof tx.date === "string" ? tx.date.split("T")[0] : String(tx.date),
+        amount: Number(tx.amount),
+        details: tx.details ?? "",
+        disbursementId: extractDisbursementId(tx.details ?? ""),
+        platform,
+      }
+    })
 
-  // Also check CYBERGRANTS rows since those flow through the same Benevity pipeline
-  const cybergrantBankRows = bankTxns
-    .filter(tx => {
-      const d = (tx.details ?? "").toUpperCase()
-      return d.includes("CYBERGRANT") && Number(tx.amount) > 0
-    })
-    .map(tx => ({
-      id: tx.id,
-      date: typeof tx.date === "string" ? tx.date.split("T")[0] : String(tx.date),
-      amount: Number(tx.amount),
-      details: tx.details ?? "",
-      disbursementId: null as string | null,
-    }))
+  // Kept so the summary card can still surface a CyberGrants tally separately.
+  const cybergrantBankRows = platformBankRows.filter(r => r.platform === "cybergrants")
 
   // Build disbursement lookup map
   const benevityMap = new Map<string, BenevityDisbursement>()
@@ -116,8 +118,8 @@ export async function GET(_request: Request) {
   const rows: ReconRow[] = []
   const matchedIds = new Set<string>()
 
-  // Walk bank AOG rows, match against Benevity
-  for (const bank of aogBankRows) {
+  // Walk every platform bank row (AOG + CyberGrants), match against Benevity
+  for (const bank of platformBankRows) {
     if (bank.disbursementId && benevityMap.has(bank.disbursementId)) {
       const ben = benevityMap.get(bank.disbursementId)!
       const benevityNet = Number(ben.net_received) || 0
@@ -189,7 +191,7 @@ export async function GET(_request: Request) {
     mismatch: rows.filter(r => r.status === "mismatch").length,
     missingBenevity: rows.filter(r => r.status === "missing_benevity").length,
     missingBank: rows.filter(r => r.status === "missing_bank").length,
-    bankTotal: aogBankRows.reduce((s, r) => s + r.amount, 0),
+    bankTotal: platformBankRows.reduce((s, r) => s + r.amount, 0),
     benevityTotal: benevityDisbursements.reduce((s, d) => s + (Number(d.net_received) || 0), 0),
     cybergrantCount: cybergrantBankRows.length,
     cybergrantTotal: cybergrantBankRows.reduce((s, r) => s + r.amount, 0),

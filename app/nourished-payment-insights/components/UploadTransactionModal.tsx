@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Upload,
 } from "lucide-react"
+import { DataFreshnessBanner } from "./DataFreshnessBanner"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -367,6 +368,9 @@ export function UploadTransactionModal({ open, onClose }: Props) {
         </DialogHeader>
 
         <div className="mt-2">
+          {(status === "idle" || status === "error") && (
+            <DataFreshnessBanner source="bank" open={open} />
+          )}
           {status === "idle"      && renderDropzone()}
           {status === "parsing"   && renderParsing()}
           {status === "preview"   && renderPreview()}

@@ -113,7 +113,7 @@ export default function PaymentInsightsLayout({ children }: PaymentInsightsLayou
       onClick={() => setBenevityOpen(true)}
     >
       <Heart size={16} />
-      <span className="hidden sm:inline">Upload Benevity</span>
+      <span className="hidden sm:inline">Upload Corporate</span>
     </Button>
     <UploadBenevityModal open={benevityOpen} onClose={() => setBenevityOpen(false)} />
   </>

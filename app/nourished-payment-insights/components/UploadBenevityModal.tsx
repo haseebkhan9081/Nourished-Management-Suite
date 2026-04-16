@@ -18,12 +18,46 @@ import {
   Upload,
 } from "lucide-react"
 import { parseBenevityCsv, type BenevityParsedFile } from "@/lib/benevity-parser"
+import { parseCyberGrantsCsv, isCyberGrantsCsv, type CyberGrantsParsedFile } from "@/lib/cybergrants-parser"
+import { DataFreshnessBanner } from "./DataFreshnessBanner"
+
+// Common upload shape so both sources flow through the same backend payload.
+type NormalizedSource = "benevity" | "cybergrants"
+interface NormalizedParsed {
+  source: NormalizedSource
+  disbursementIds: string[]   // may be 1 (Benevity) or many (CyberGrants)
+  donations: BenevityParsedFile["donations"]
+  grossTotal: number
+  netTotal: number
+  errors: string[]
+}
+
+function normalizeBenevity(p: BenevityParsedFile): NormalizedParsed {
+  return {
+    source: "benevity",
+    disbursementIds: p.disbursementId ? [p.disbursementId] : [],
+    donations: p.donations,
+    grossTotal: p.grossTotal,
+    netTotal: p.netTotal,
+    errors: p.errors,
+  }
+}
+function normalizeCyberGrants(p: CyberGrantsParsedFile): NormalizedParsed {
+  return {
+    source: "cybergrants",
+    disbursementIds: p.disbursementIds,
+    donations: p.donations as BenevityParsedFile["donations"],
+    grossTotal: p.grossTotal,
+    netTotal: p.netTotal,
+    errors: p.errors,
+  }
+}
 
 type UploadStatus = "idle" | "parsing" | "preview" | "uploading" | "success" | "error"
 
 interface ParsedResult {
   fileName: string
-  parsed: BenevityParsedFile
+  parsed: NormalizedParsed
 }
 
 interface Props {
@@ -40,7 +74,7 @@ export function UploadBenevityModal({ open, onClose }: Props) {
   const [serverResult, setServerResult] = useState<{
     totalInserted: number
     totalSkipped: number
-    perFile: Array<{ fileName: string; disbursementId: string; inserted: number; skipped: number }>
+    perFile: Array<{ fileName: string; source: NormalizedSource; disbursementSummary: string; inserted: number; skipped: number }>
   } | null>(null)
 
   const reset = () => {
@@ -82,15 +116,18 @@ export function UploadBenevityModal({ open, onClose }: Props) {
       const parsed: ParsedResult[] = []
       for (const file of fileArr) {
         const text = await readFile(file)
-        const p = parseBenevityCsv(text)
-        parsed.push({ fileName: file.name, parsed: p })
+        // Auto-detect: CyberGrants has a flat header with "CyberGrants Donation ID"
+        // / "Pass-through Agent" on line 1. Benevity has a metadata preamble.
+        const normalized: NormalizedParsed = isCyberGrantsCsv(text)
+          ? normalizeCyberGrants(parseCyberGrantsCsv(text))
+          : normalizeBenevity(parseBenevityCsv(text))
+        parsed.push({ fileName: file.name, parsed: normalized })
       }
 
-      // If every parsed file has zero donations and zero disbursement id, bail
       const allEmpty = parsed.every(r => r.parsed.donations.length === 0)
       if (allEmpty) {
         throw new Error(
-          "No donations found in any of the selected files. Make sure you're uploading the 'Detailed Donation Report' export from Benevity, not the summary."
+          "No donations found in any of the selected files. Make sure you're uploading a Benevity 'Detailed Donation Report' or a CyberGrants payment-detail export."
         )
       }
 
@@ -124,7 +161,7 @@ export function UploadBenevityModal({ open, onClose }: Props) {
     setStatus("uploading")
     setErrorMsg(null)
     try {
-      const perFile: Array<{ fileName: string; disbursementId: string; inserted: number; skipped: number }> = []
+      const perFile: Array<{ fileName: string; source: NormalizedSource; disbursementSummary: string; inserted: number; skipped: number }> = []
       let totalInserted = 0
       let totalSkipped = 0
 
@@ -148,9 +185,15 @@ export function UploadBenevityModal({ open, onClose }: Props) {
         const skipped = data.skipped ?? 0
         totalInserted += inserted
         totalSkipped += skipped
+        const ids = file.parsed.disbursementIds
+        const disbursementSummary = ids.length === 0
+          ? "(none)"
+          : ids.length === 1 ? ids[0]
+          : `${ids.length} disbursements`
         perFile.push({
           fileName: file.fileName,
-          disbursementId: file.parsed.disbursementId,
+          source: file.parsed.source,
+          disbursementSummary,
           inserted,
           skipped,
         })
@@ -179,11 +222,11 @@ export function UploadBenevityModal({ open, onClose }: Props) {
     >
       <UploadCloud size={44} className={`mb-4 ${isDragging ? "text-[#A2BD9D]" : "text-gray-400"}`} />
       <p className="text-sm font-medium text-gray-700">
-        Drag &amp; drop one or more Benevity CSV files
+        Drag &amp; drop Benevity or CyberGrants CSV files
       </p>
-      <p className="text-xs text-gray-400 mt-1">or click to browse</p>
+      <p className="text-xs text-gray-400 mt-1">or click to browse · format is auto-detected</p>
       <span className="mt-4 text-xs text-gray-400 bg-gray-100 rounded-full px-3 py-1">
-        Detailed Donation Reports from Benevity Causes Portal
+        Benevity "Detailed Donation Report" or CyberGrants payment-detail export
       </span>
       <input
         ref={fileInputRef}
@@ -248,29 +291,44 @@ export function UploadBenevityModal({ open, onClose }: Props) {
         )}
 
         <div className="space-y-2">
-          {files.map(f => (
-            <div
-              key={f.fileName}
-              className="flex items-center justify-between bg-white border rounded-lg px-4 py-2.5 shadow-sm"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <FileSpreadsheet size={18} className="text-[#A2BD9D] shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-700 truncate">{f.fileName}</p>
-                  <p className="text-xs text-gray-400">
-                    Disbursement {f.parsed.disbursementId || "?"} · {f.parsed.donations.length} donors · ${Math.round(f.parsed.netTotal).toLocaleString()} net
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setFiles(prev => prev.filter(x => x.fileName !== f.fileName))}
-                className="text-gray-400 hover:text-red-500 ml-3 shrink-0"
-                title="Remove"
+          {files.map(f => {
+            const ids = f.parsed.disbursementIds
+            const disbLabel = ids.length === 0
+              ? "(no disbursement)"
+              : ids.length === 1 ? `Disbursement ${ids[0]}`
+              : `${ids.length} disbursements (${ids.slice(0, 2).join(", ")}${ids.length > 2 ? "…" : ""})`
+            const sourceBadge = f.parsed.source === "cybergrants"
+              ? { label: "CyberGrants", className: "bg-blue-100 text-blue-700" }
+              : { label: "Benevity",    className: "bg-[#A2BD9D]/20 text-[#4F8A70]" }
+            return (
+              <div
+                key={f.fileName}
+                className="flex items-center justify-between bg-white border rounded-lg px-4 py-2.5 shadow-sm"
               >
-                <X size={16} />
-              </button>
-            </div>
-          ))}
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileSpreadsheet size={18} className="text-[#A2BD9D] shrink-0" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-700 truncate">{f.fileName}</p>
+                      <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${sourceBadge.className}`}>
+                        {sourceBadge.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {disbLabel} · {f.parsed.donations.length} donors · ${Math.round(f.parsed.netTotal).toLocaleString()} net
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setFiles(prev => prev.filter(x => x.fileName !== f.fileName))}
+                  className="text-gray-400 hover:text-red-500 ml-3 shrink-0"
+                  title="Remove"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )
+          })}
         </div>
       </div>
     )
@@ -307,8 +365,15 @@ export function UploadBenevityModal({ open, onClose }: Props) {
           {serverResult.perFile.map(r => (
             <div key={r.fileName} className="px-4 py-2 flex items-center justify-between">
               <div className="min-w-0">
-                <p className="font-medium text-gray-800 truncate">{r.fileName}</p>
-                <p className="text-xs text-gray-400">Disbursement {r.disbursementId}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-gray-800 truncate">{r.fileName}</p>
+                  <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${
+                    r.source === "cybergrants" ? "bg-blue-100 text-blue-700" : "bg-[#A2BD9D]/20 text-[#4F8A70]"
+                  }`}>
+                    {r.source === "cybergrants" ? "CyberGrants" : "Benevity"}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400">{r.disbursementSummary}</p>
               </div>
               <div className="text-xs text-gray-600 text-right shrink-0 ml-4">
                 <span className="text-[#A2BD9D] font-semibold">{r.inserted} new</span>
@@ -368,15 +433,18 @@ export function UploadBenevityModal({ open, onClose }: Props) {
       <DialogContent className="max-w-3xl bg-gray-50">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold text-gray-900">
-            Upload Benevity Reports
+            Upload Corporate Donor Reports
           </DialogTitle>
           <p className="text-sm text-gray-600">
-            Drop one or more "Detailed Donation Report" CSVs from the Benevity Causes Portal.
-            Dedup is automatic via Benevity's Transaction ID, so re-uploading the same file is safe.
+            Drop Benevity "Detailed Donation Report" CSVs or CyberGrants payment-detail exports.
+            Format is detected automatically. Dedup is safe — re-uploading the same file does nothing.
           </p>
         </DialogHeader>
 
         <div className="mt-2">
+          {(status === "idle" || status === "error") && (
+            <DataFreshnessBanner source="benevity" open={open} />
+          )}
           {status === "idle"      && renderDropzone()}
           {status === "parsing"   && renderParsing()}
           {status === "preview"   && renderPreview()}

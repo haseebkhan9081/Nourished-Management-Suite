@@ -162,7 +162,7 @@ export default function BenevityDisbursementsPage() {
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">
-                    No disbursements yet. Upload Benevity CSVs via the "Upload Benevity" button.
+                    No disbursements yet. Upload CSVs via the "Upload Corporate" button.
                   </td>
                 </tr>
               ) : (

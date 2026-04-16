@@ -28,6 +28,7 @@ interface BenevityDonationRow {
   match_amount: number | string
   cause_support_fee: number | string
   merchant_fee: number | string
+  created_at?: string
 }
 
 interface BankTx {
@@ -118,7 +119,7 @@ export async function GET(request: Request) {
     .filter(tx => {
       const d = (tx.details ?? "").toUpperCase()
       return (
-        (d.includes("AMER ONLINE GIV") || d.includes("CYBERGRANT") || d.includes("REF*TN*")) &&
+        (d.includes("AMER ONLINE GIV") || d.includes("CYBERGRANT") || d.includes("REF*TN*") || d.includes("BENEV")) &&
         Number(tx.amount) > 0
       )
     })
@@ -281,6 +282,27 @@ export async function GET(request: Request) {
     ? matchTotal / (personalTotal + matchTotal)
     : 0
 
+  // Upload metadata — surface when the last CSV was loaded and what period it covers
+  let lastUploadedAt: string | null = null
+  let earliestDonationDate: string | null = null
+  let latestDonationDate: string | null = null
+  for (const d of donations) {
+    if (d.created_at) {
+      if (!lastUploadedAt || d.created_at > lastUploadedAt) lastUploadedAt = d.created_at
+    }
+    if (d.donation_date) {
+      if (!earliestDonationDate || d.donation_date < earliestDonationDate) earliestDonationDate = d.donation_date
+      if (!latestDonationDate || d.donation_date > latestDonationDate) latestDonationDate = d.donation_date
+    }
+  }
+  const uploadMeta = {
+    lastUploadedAt,
+    earliestDate: earliestDonationDate,
+    latestDate: latestDonationDate,
+    recordCount: donations.length,
+    disbursementCount: disbursementIds.size,
+  }
+
   const data = {
     asOf: new Date().toISOString(),
     donationCount,
@@ -309,6 +331,7 @@ export async function GET(request: Request) {
     topDonors,
     topCompanies,
     monthly: monthlyArr,
+    uploadMeta,
     cached: false,
   }
 

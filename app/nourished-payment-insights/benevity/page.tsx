@@ -238,7 +238,7 @@ export default function BenevityInsightsPage() {
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
           <p className="text-sm font-semibold text-yellow-800 mb-2">No Benevity data yet</p>
           <p className="text-xs text-yellow-700">
-            Upload at least one "Detailed Donation Report" CSV from the Benevity Causes Portal via the <strong>Upload Benevity</strong> button in the header, then come back to this page.
+            Upload at least one "Detailed Donation Report" CSV from the Benevity Causes Portal via the <strong>Upload Corporate</strong> button in the header, then come back to this page.
           </p>
         </div>
       </div>
@@ -300,7 +300,7 @@ export default function BenevityInsightsPage() {
                 {data.pending.count} bank deposit{data.pending.count !== 1 ? "s" : ""} awaiting donor-level breakdown ({formatCurrency(data.pending.total)})
               </p>
               <p className="text-xs text-amber-700 mt-1">
-                These are Benevity / CyberGrants lump sums from your bank CSV that haven't had their detailed donor reports uploaded yet. They're shown below as placeholder rows with the disbursement/ACH ID as the donor name, and the amounts are included in all totals so reconciliation stays correct. Upload the matching detailed CSVs via the <strong>Upload Benevity</strong> button to replace them with real donor data.
+                These are Benevity / CyberGrants lump sums from your bank CSV that haven't had their detailed donor reports uploaded yet. They're shown below as placeholder rows with the disbursement/ACH ID as the donor name, and the amounts are included in all totals so reconciliation stays correct. Upload the matching detailed CSVs via the <strong>Upload Corporate</strong> button to replace them with real donor data.
               </p>
             </div>
           </div>
