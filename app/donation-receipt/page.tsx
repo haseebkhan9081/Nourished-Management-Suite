@@ -21,9 +21,68 @@ import {
   Receipt,
   CalendarCheck,
   RefreshCw,
+  ImagePlus,
+  X,
+  Download,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+// ─── Image compression ────────────────────────────────────────────────────────
+// Downscale to max 1600px longest side, re-encode as JPEG q=0.75.
+// Returns { dataUrl, sizeBytes }. Throws on read/decode failure.
+const MAX_DIM = 1600;
+const JPEG_QUALITY = 0.75;
+const MAX_UPLOAD_BYTES = 500 * 1024;
+
+async function compressImage(file: File): Promise<{ dataUrl: string; sizeBytes: number }> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("Could not decode image"));
+      i.src = objectUrl;
+    });
+
+    const longest = Math.max(img.width, img.height);
+    const scale = longest > MAX_DIM ? MAX_DIM / longest : 1;
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not available");
+    ctx.drawImage(img, 0, 0, w, h);
+
+    const blob: Blob = await new Promise((resolve, reject) =>
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("Canvas encode failed"))),
+        "image/jpeg",
+        JPEG_QUALITY,
+      ),
+    );
+
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = () => reject(new Error("Failed to read compressed blob"));
+      r.readAsDataURL(blob);
+    });
+
+    return { dataUrl, sizeBytes: blob.size };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +101,7 @@ interface SingleReceiptPayload {
     productName: "Nourished Education Contribution";
   };
   insertIntoDB: boolean;
+  image?: string;
 }
 
 interface YearEndPayload {
@@ -87,13 +147,20 @@ async function fetchDonationByTransactionId(
   return res.json();
 }
 
-async function sendSingleReceipt(payload: SingleReceiptPayload): Promise<void> {
+async function sendSingleReceipt(
+  payload: SingleReceiptPayload,
+): Promise<{ donationId?: string | number; imageId?: number }> {
   const res = await fetch(`${API_BASE}/receipt/single`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error("Failed to send receipt");
+  try {
+    return await res.json();
+  } catch {
+    return {};
+  }
 }
 
 async function sendYearEndReceipt(payload: YearEndPayload): Promise<void> {
@@ -182,6 +249,47 @@ function SingleReceiptTab() {
     type: "success" | "error";
   } | null>(null);
 
+  // Receipt image (only used in manual + insertIntoDB mode)
+  const [image, setImage] = useState<{
+    dataUrl: string;
+    sizeBytes: number;
+    originalName: string;
+  } | null>(null);
+  const [imageProcessing, setImageProcessing] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [lastSavedDonationId, setLastSavedDonationId] = useState<string | null>(null);
+  const [lastSavedHadImage, setLastSavedHadImage] = useState(false);
+
+  async function handleImageFile(file: File | null) {
+    if (!file) {
+      setImage(null);
+      setImageError(null);
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setImageError("Please select an image file.");
+      return;
+    }
+    setImageError(null);
+    setImageProcessing(true);
+    try {
+      const compressed = await compressImage(file);
+      if (compressed.sizeBytes > MAX_UPLOAD_BYTES) {
+        setImageError(
+          `Even after compression this image is ${formatBytes(compressed.sizeBytes)}. Please pick a smaller image.`,
+        );
+        setImage(null);
+        return;
+      }
+      setImage({ ...compressed, originalName: file.name });
+    } catch (e) {
+      setImageError(e instanceof Error ? e.message : "Could not process image.");
+      setImage(null);
+    } finally {
+      setImageProcessing(false);
+    }
+  }
+
   // Donation ID is required in manual mode only when NOT inserting into DB
   const donationIdRequired = mode === "manual" && !insertIntoDB;
   const donationIdError =
@@ -200,6 +308,10 @@ function SingleReceiptTab() {
     setInsertIntoDB(false);
     setSubmitted(false);
     setStatus(null);
+    setImage(null);
+    setImageError(null);
+    setLastSavedDonationId(null);
+    setLastSavedHadImage(false);
   }
 
   async function handleFetch() {
@@ -250,12 +362,18 @@ function SingleReceiptTab() {
       },
       // transaction mode never inserts (record already exists)
       insertIntoDB: mode === "manual" ? insertIntoDB : false,
+      // Only attach the image when we're inserting a new record
+      ...(mode === "manual" && insertIntoDB && image ? { image: image.dataUrl } : {}),
     };
 
     try {
-      await sendSingleReceipt(payload);
+      const result = await sendSingleReceipt(payload);
       setStatus({ msg: "Receipt sent successfully!", type: "success" });
       setSubmitted(false);
+      if (result?.donationId) {
+        setLastSavedDonationId(String(result.donationId));
+        setLastSavedHadImage(Boolean(result.imageId));
+      }
     } catch {
       setStatus({
         msg: "Failed to send receipt. Please try again.",
@@ -452,6 +570,10 @@ function SingleReceiptTab() {
               setInsertIntoDB(!!v);
               setSubmitted(false);
               if (!!v) setField("donationId", "");
+              if (!v) {
+                setImage(null);
+                setImageError(null);
+              }
             }}
             className="border-[#A2BD9D] data-[state=checked]:bg-[#A2BD9D] data-[state=checked]:border-[#A2BD9D]"
           />
@@ -467,8 +589,86 @@ function SingleReceiptTab() {
         </div>
       )}
 
+      {/* Image upload — only when saving a new record */}
+      {mode === "manual" && insertIntoDB && (
+        <div className="py-3 px-4 rounded-lg bg-gray-50 border border-gray-100 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Proof image (optional)</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                e.g. photo of cheque or deposit slip. Compressed automatically; max {formatBytes(MAX_UPLOAD_BYTES)}.
+              </p>
+            </div>
+            {!image && (
+              <label className="inline-flex items-center gap-1.5 text-sm font-medium text-[#3d6b38] bg-white border border-[#A2BD9D] rounded-md px-3 h-9 cursor-pointer hover:bg-[#f0f6ef]">
+                <ImagePlus size={16} />
+                <span>Choose image</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleImageFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            )}
+          </div>
+
+          {imageProcessing && (
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <Loader2 size={14} className="animate-spin" />
+              Compressing image…
+            </div>
+          )}
+
+          {imageError && (
+            <p className="text-xs text-red-500">{imageError}</p>
+          )}
+
+          {image && (
+            <div className="flex items-center gap-3 p-2 bg-white rounded-md border border-gray-200">
+              <img
+                src={image.dataUrl}
+                alt="Receipt proof preview"
+                className="w-16 h-16 object-cover rounded-md border border-gray-100"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-700 truncate">{image.originalName}</p>
+                <p className="text-xs text-gray-500">
+                  Compressed: {formatBytes(image.sizeBytes)}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setImage(null);
+                  setImageError(null);
+                }}
+                className="h-8 px-2 text-gray-500 hover:text-red-600"
+              >
+                <X size={16} />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Status */}
       {status && <StatusBadge message={status.msg} type={status.type} />}
+
+      {/* Download link for just-saved receipt image */}
+      {lastSavedDonationId && lastSavedHadImage && (
+        <a
+          href={`${API_BASE}/receipt/${encodeURIComponent(lastSavedDonationId)}/image`}
+          className="inline-flex items-center gap-2 text-sm font-medium text-[#3d6b38] bg-[#f0f6ef] border border-[#A2BD9D] rounded-md px-3 h-9 hover:bg-[#e4efe1]"
+          target="_blank"
+          rel="noopener"
+        >
+          <Download size={16} />
+          Download receipt image (donation #{lastSavedDonationId})
+        </a>
+      )}
 
       {/* Send */}
       <div className="pt-2 border-t border-gray-100">
