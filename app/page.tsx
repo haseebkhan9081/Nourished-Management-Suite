@@ -1,10 +1,10 @@
 import { AuthWrapper } from "@/components/auth-wrapper"
-import { Dashboard } from "@/components/dashboard"
+import { ModuleLanding } from "@/components/module-landing"
 
 export default function Home() {
   return (
     <AuthWrapper>
-      <Dashboard />
+      <ModuleLanding />
     </AuthWrapper>
   )
 }
