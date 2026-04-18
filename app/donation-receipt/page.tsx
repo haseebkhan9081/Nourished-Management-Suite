@@ -194,6 +194,10 @@ interface ReceiptLog {
 }
 
 interface Donor {
+  // Composite `email|name_key` — stable identity for donors that share a
+  // placeholder email (e.g. DAFgiving360 + Fidelity Charitable both using
+  // info@nourishedusa.org). Prefer this over `email` for keys/selection.
+  donorKey: string;
   email: string;
   name: string;
   phone: string;
@@ -336,6 +340,33 @@ async function searchBankDonors(q: string, signal?: AbortSignal): Promise<BankDo
   return data.donors ?? [];
 }
 
+// Benevity / corporate-match donors. The foundation issues the tax receipt
+// directly, so this tab is informational only — no send action.
+interface BenevityDonor {
+  email: string | null;
+  name: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  company: string;
+  totalDonation: number;
+  totalMatch: number;
+  donationCount: number;
+}
+
+async function searchBenevityDonors(
+  q: string,
+  signal?: AbortSignal,
+): Promise<BenevityDonor[]> {
+  const res = await fetch(
+    `${API_BASE}/receipt/benevity-donors/search?q=${encodeURIComponent(q)}`,
+    { signal },
+  );
+  if (!res.ok) throw new Error("Benevity search failed");
+  const data = await res.json();
+  return data.donors ?? [];
+}
+
 interface IncompletePayment {
   paymentId: number;
   donationId: number | null;
@@ -449,19 +480,22 @@ function InfoRow({
 function DonorSearchFlow() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Donor[]>([]);
+  const [benevityResults, setBenevityResults] = useState<BenevityDonor[]>([]);
   const [searching, setSearching] = useState(false);
-  const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  const [selectedDonorKey, setSelectedDonorKey] = useState<string | null>(null);
   const [globalStatus, setGlobalStatus] = useState<{
     msg: string;
     type: "success" | "error";
   } | null>(null);
 
-  // Debounced search.
+  // Debounced search — Stripe + Benevity in parallel so foundation-issued
+  // donors show up alongside sendable ones in the same list.
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {
       setResults([]);
+      setBenevityResults([]);
       setSearching(false);
       return;
     }
@@ -471,11 +505,16 @@ function DonorSearchFlow() {
       abortRef.current = ctrl;
       setSearching(true);
       try {
-        const donors = await searchDonors(q, ctrl.signal);
+        const [donors, benevity] = await Promise.all([
+          searchDonors(q, ctrl.signal).catch(() => []),
+          searchBenevityDonors(q, ctrl.signal).catch(() => []),
+        ]);
         setResults(donors);
+        setBenevityResults(benevity);
       } catch (err: any) {
         if (err?.name !== "AbortError") {
           setResults([]);
+          setBenevityResults([]);
         }
       } finally {
         setSearching(false);
@@ -485,8 +524,8 @@ function DonorSearchFlow() {
   }, [query]);
 
   const selectedDonor = useMemo(
-    () => results.find((d) => d.email === selectedEmail) ?? null,
-    [results, selectedEmail],
+    () => results.find((d) => d.donorKey === selectedDonorKey) ?? null,
+    [results, selectedDonorKey],
   );
 
   // Called after a successful send so the donor's receipt history refreshes.
@@ -494,8 +533,12 @@ function DonorSearchFlow() {
     const q = query.trim();
     if (q.length < 2) return;
     try {
-      const donors = await searchDonors(q);
+      const [donors, benevity] = await Promise.all([
+        searchDonors(q).catch(() => []),
+        searchBenevityDonors(q).catch(() => []),
+      ]);
       setResults(donors);
+      setBenevityResults(benevity);
     } catch {
       /* keep stale results; user can retry */
     }
@@ -527,10 +570,11 @@ function DonorSearchFlow() {
       {query.trim().length >= 2 && (
         <DonorResultsList
           results={results}
+          benevityResults={benevityResults}
           searching={searching}
-          selectedEmail={selectedEmail}
-          onSelect={(email) => {
-            setSelectedEmail(email);
+          selectedDonorKey={selectedDonorKey}
+          onSelect={(key) => {
+            setSelectedDonorKey(key);
             setGlobalStatus(null);
           }}
         />
@@ -547,6 +591,7 @@ function DonorSearchFlow() {
             refreshDonor();
           }}
           onError={(msg) => setGlobalStatus({ msg, type: "error" })}
+          onRefresh={refreshDonor}
         />
       )}
 
@@ -563,16 +608,30 @@ function DonorSearchFlow() {
 
 function DonorResultsList({
   results,
+  benevityResults,
   searching,
-  selectedEmail,
+  selectedDonorKey,
   onSelect,
 }: {
   results: Donor[];
+  benevityResults: BenevityDonor[];
   searching: boolean;
-  selectedEmail: string | null;
-  onSelect: (email: string) => void;
+  selectedDonorKey: string | null;
+  onSelect: (donorKey: string) => void;
 }) {
-  if (searching && results.length === 0) {
+  // Filter out Benevity duplicates that share an email with a Stripe donor —
+  // the Stripe row already handles them (and is sendable).
+  const stripeEmails = new Set(
+    results.map((d) => (d.email ?? "").toLowerCase()).filter(Boolean),
+  );
+  const benevityOnly = benevityResults.filter((b) => {
+    const em = (b.email ?? "").toLowerCase();
+    return !em || !stripeEmails.has(em);
+  });
+
+  const hasAnyResults = results.length > 0 || benevityOnly.length > 0;
+
+  if (searching && !hasAnyResults) {
     return (
       <div className="border border-gray-200 rounded-lg p-6 text-center text-sm text-gray-400 bg-white">
         <Loader2 className="animate-spin mx-auto mb-2" size={18} />
@@ -581,7 +640,7 @@ function DonorResultsList({
     );
   }
 
-  if (!searching && results.length === 0) {
+  if (!searching && !hasAnyResults) {
     return (
       <div className="border border-dashed border-gray-200 rounded-lg p-6 text-center text-sm text-gray-500 bg-gray-50">
         No donors matched your search.
@@ -590,13 +649,15 @@ function DonorResultsList({
   }
 
   return (
+    <div className="space-y-4">
+      {results.length > 0 && (
     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white divide-y divide-gray-100">
       {results.map((d) => {
-        const isActive = d.email === selectedEmail;
+        const isActive = d.donorKey === selectedDonorKey;
         return (
           <button
-            key={d.email}
-            onClick={() => onSelect(d.email)}
+            key={d.donorKey}
+            onClick={() => onSelect(d.donorKey)}
             className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
               isActive ? "bg-[#f0f6ef]" : "hover:bg-gray-50"
             }`}
@@ -616,7 +677,9 @@ function DonorResultsList({
                 )}
               </div>
               <p className="text-xs text-gray-500 truncate mt-0.5">
-                {d.email}
+                {(d.email ?? "").trim().toLowerCase() === "na" || !d.email
+                  ? "NA — no email"
+                  : d.email}
                 {d.phone ? ` · ${d.phone}` : ""}
               </p>
             </div>
@@ -631,6 +694,26 @@ function DonorResultsList({
           </button>
         );
       })}
+    </div>
+      )}
+
+      {benevityOnly.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Benevity / CyberGrants
+            </p>
+            <Badge className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-medium">
+              Receipt already issued by Benevity — no action needed
+            </Badge>
+          </div>
+          <div className="border border-gray-200 rounded-lg overflow-hidden bg-white divide-y divide-gray-100">
+            {benevityOnly.map((d, i) => (
+              <BenevityDonorRow key={`${d.email ?? d.name}-${i}`} donor={d} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -661,10 +744,12 @@ function DonorDetailPanel({
   donor,
   onSent,
   onError,
+  onRefresh,
 }: {
   donor: Donor;
   onSent: (msg: string) => void;
   onError: (msg: string) => void;
+  onRefresh: () => Promise<void> | void;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [yearPick, setYearPick] = useState<string>(
@@ -672,10 +757,56 @@ function DonorDetailPanel({
   );
   const [pending, setPending] = useState<PendingSend | null>(null);
 
+  // Email-less donors (e.g. migrated DAF / foundation rows) store "NA" in the
+  // email column. Admins need to add a real address before a receipt can go
+  // out. Treat any of the known placeholders the same way.
+  const hasValidEmail = useMemo(() => {
+    const e = (donor.email ?? "").trim().toLowerCase();
+    return e.length > 0 && e !== "na" && e.includes("@");
+  }, [donor.email]);
+
+  const [emailEditOpen, setEmailEditOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
+
+  async function saveDonorEmail() {
+    const trimmed = emailDraft.trim();
+    if (!trimmed || !trimmed.includes("@")) {
+      onError("Enter a valid email address.");
+      return;
+    }
+    setEmailSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/receipt/donor/update-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentEmail: donor.email,
+          name: donor.name,
+          newEmail: trimmed,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to update email");
+      }
+      setEmailEditOpen(false);
+      setEmailDraft("");
+      await onRefresh();
+      onSent(`Email set to ${trimmed} for ${donor.name}.`);
+    } catch (err: any) {
+      onError(err?.message ?? "Failed to update email");
+    } finally {
+      setEmailSaving(false);
+    }
+  }
+
   // Reset selections when switching donor.
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [donor.email]);
+    setEmailEditOpen(false);
+    setEmailDraft("");
+  }, [donor.donorKey]);
 
   function toggleDonation(id: number) {
     setSelectedIds((prev) => {
@@ -773,7 +904,61 @@ function DonorDetailPanel({
               </h2>
             </div>
             <div className="space-y-1">
-              <InfoRow icon={Mail} value={donor.email} />
+              {hasValidEmail ? (
+                <InfoRow icon={Mail} value={donor.email} />
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Mail size={14} className="text-gray-400 shrink-0" />
+                  <span className="font-medium text-gray-600">NA</span>
+                  {!emailEditOpen && (
+                    <button
+                      onClick={() => {
+                        setEmailEditOpen(true);
+                        setEmailDraft("");
+                      }}
+                      className="text-xs text-[#3d6b38] hover:underline"
+                    >
+                      + Add email
+                    </button>
+                  )}
+                </div>
+              )}
+              {emailEditOpen && (
+                <div className="flex items-center gap-2 pl-5">
+                  <Input
+                    value={emailDraft}
+                    onChange={(e) => setEmailDraft(e.target.value)}
+                    placeholder="donor@example.com"
+                    className="h-8 text-xs flex-1 max-w-xs focus-visible:ring-[#A2BD9D]"
+                    disabled={emailSaving}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveDonorEmail();
+                      if (e.key === "Escape") {
+                        setEmailEditOpen(false);
+                        setEmailDraft("");
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={saveDonorEmail}
+                    disabled={emailSaving}
+                    className="h-8 px-3 bg-[#A2BD9D] hover:bg-[#8fad8a] text-white text-xs"
+                  >
+                    {emailSaving ? "Saving…" : "Save"}
+                  </Button>
+                  <button
+                    onClick={() => {
+                      setEmailEditOpen(false);
+                      setEmailDraft("");
+                    }}
+                    disabled={emailSaving}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
               <InfoRow icon={Phone} value={donor.phone} />
               <InfoRow
                 icon={MapPin}
@@ -913,7 +1098,9 @@ function DonorDetailPanel({
                     size="sm"
                     variant="ghost"
                     onClick={() => startSingle(d)}
-                    className="h-7 text-xs text-[#3d6b38] hover:bg-[#f0f6ef]"
+                    disabled={!hasValidEmail}
+                    title={!hasValidEmail ? "Add an email to this donor first" : undefined}
+                    className="h-7 text-xs text-[#3d6b38] hover:bg-[#f0f6ef] disabled:text-gray-400 disabled:cursor-not-allowed"
                   >
                     <Send size={12} className="mr-1" />
                     Send
@@ -936,7 +1123,9 @@ function DonorDetailPanel({
             </div>
             <Button
               onClick={startCombined}
-              className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-8 px-4 text-sm"
+              disabled={!hasValidEmail}
+              title={!hasValidEmail ? "Add an email to this donor first" : undefined}
+              className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-8 px-4 text-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               <Send size={13} className="mr-1.5" />
               Send combined receipt
@@ -985,7 +1174,9 @@ function DonorDetailPanel({
           </div>
           <Button
             onClick={startYearEnd}
-            className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-9 px-4 text-sm"
+            disabled={!hasValidEmail}
+            title={!hasValidEmail ? "Add an email to this donor first" : undefined}
+            className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-9 px-4 text-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             <CalendarCheck size={14} className="mr-1.5" />
             Send year-end receipt
@@ -1655,6 +1846,51 @@ interface Reconciliation {
     missingSample: string[];
     extraSample: string[];
   };
+}
+
+// Read-only row for Benevity / CyberGrants donors surfaced in Donor Search.
+// The partner foundation already issued the tax receipt — shown for context
+// so admins don't think the donor is missing.
+function BenevityDonorRow({ donor }: { donor: BenevityDonor }) {
+  const net = donor.totalDonation + donor.totalMatch;
+  const location = [donor.city, donor.state, donor.postalCode]
+    .filter(Boolean)
+    .join(", ");
+  return (
+    <div className="p-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-gray-800 truncate">
+            {donor.name || "Anonymous"}
+          </span>
+          <Badge className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-medium">
+            Foundation-issued receipt
+          </Badge>
+        </div>
+        <div className="mt-1 space-y-0.5">
+          {donor.email && (
+            <InfoRow icon={Mail} value={donor.email} />
+          )}
+          {donor.company && (
+            <InfoRow icon={User} value={donor.company} />
+          )}
+          {location && <InfoRow icon={MapPin} value={location} muted />}
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="text-sm font-semibold text-gray-800">
+          {formatCurrency(net)}
+        </div>
+        <div className="text-[11px] text-gray-500">
+          {formatCurrency(donor.totalDonation)} personal ·{" "}
+          {formatCurrency(donor.totalMatch)} match
+        </div>
+        <div className="text-[11px] text-gray-500">
+          {donor.donationCount} donation{donor.donationCount === 1 ? "" : "s"}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function IncompletePaymentsTab() {

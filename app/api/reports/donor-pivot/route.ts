@@ -215,9 +215,66 @@ export async function GET(request: Request) {
   // ── Bank transactions: fetch from backend, classify, group ──────────────
   // Reversal pair netting is applied BEFORE classification so round-trip
   // refunds don't inflate donor totals (matches main dashboard behavior).
+  //
+  // Bank rows that have an attributed donation in the backend (either an
+  // explicit bank_<id>_* payment or a fuzzy-matched manual entry) get
+  // credited to the named donor instead of dumping into "Check Deposits
+  // (unknown)". Partial attachments are supported — the allocated portion
+  // goes to the donor, the remainder stays in its regex-classified section.
   const bankSections = new Map<string, Map<string, DonorRow>>()
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
+  // Attachments keyed by bank transaction id — multiple donors per bank row
+  // is possible (one deposit that was split across several checks).
+  const attachmentsByTxId = new Map<number, Array<{ donor: string; email: string | null; amount: number }>>()
+  if (apiBase) {
+    try {
+      const res = await fetch(`${apiBase}/receipt/bank-attachments`, { cache: "no-store" })
+      if (res.ok) {
+        const body = await res.json()
+        const atts: Array<{
+          bankTransactionId: number
+          donorName: string | null
+          donorEmail: string | null
+          amount: number
+        }> = body.attachments ?? []
+        for (const a of atts) {
+          if (!a.bankTransactionId || !Number.isFinite(a.amount) || a.amount <= 0) continue
+          const list = attachmentsByTxId.get(a.bankTransactionId) ?? []
+          list.push({
+            donor: a.donorName?.trim() || "Anonymous",
+            email: a.donorEmail,
+            amount: a.amount,
+          })
+          attachmentsByTxId.set(a.bankTransactionId, list)
+        }
+      }
+    } catch (err: any) {
+      console.error("Bank attachments fetch failed:", err?.message ?? err)
+    }
+  }
+
+  function addToSection(sectionName: string, donorKey: string, email: string | null, mk: string, amount: number) {
+    if (!bankSections.has(sectionName)) {
+      bankSections.set(sectionName, new Map())
+    }
+    const secMap = bankSections.get(sectionName)!
+    if (!secMap.has(donorKey)) {
+      secMap.set(donorKey, {
+        id: donorKey,
+        name: donorKey,
+        email,
+        monthly: Object.fromEntries(months.map(m => [m, 0])),
+        total: 0,
+      })
+    }
+    const row = secMap.get(donorKey)!
+    row.monthly[mk] = (row.monthly[mk] || 0) + amount
+    row.total += amount
+    // Fill email opportunistically if we didn't have one at insert time.
+    if (!row.email && email) row.email = email
+  }
+
   try {
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
     if (apiBase) {
       const res = await fetch(`${apiBase}/transactions`, { cache: "no-store" })
       if (res.ok) {
@@ -239,22 +296,18 @@ export async function GET(request: Request) {
           const classification = classifyBankRow(tx.details ?? "")
           if (!classification) continue
 
-          if (!bankSections.has(classification.section)) {
-            bankSections.set(classification.section, new Map())
+          // Route attributed amount to named donors, unattributed remainder
+          // to the regex-classified section.
+          const atts = attachmentsByTxId.get(tx.id) ?? []
+          let attributed = 0
+          for (const a of atts) {
+            attributed += a.amount
+            addToSection("Wells Fargo — Named Donors", a.donor, a.email, mk, a.amount)
           }
-          const secMap = bankSections.get(classification.section)!
-          if (!secMap.has(classification.donor)) {
-            secMap.set(classification.donor, {
-              id: classification.donor,
-              name: classification.donor,
-              email: null,
-              monthly: Object.fromEntries(months.map(m => [m, 0])),
-              total: 0,
-            })
+          const remainder = amt - attributed
+          if (remainder > 0.005) {
+            addToSection(classification.section, classification.donor, null, mk, remainder)
           }
-          const row = secMap.get(classification.donor)!
-          row.monthly[mk] = (row.monthly[mk] || 0) + amt
-          row.total += amt
         }
       }
     }
