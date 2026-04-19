@@ -12,5 +12,5 @@ export default withAuth({
 
 // Define which paths the middleware runs on
 export const config = {
-  matcher: ["/((?!_next|favicon.ico|login|unsubscribe).*)"], // protect everything except _next, favicon, login, unsubscribe
+  matcher: ["/((?!_next|favicon.ico|login|unsubscribe|my-gifts).*)"], // protect everything except _next, favicon, login, unsubscribe, my-gifts
 }

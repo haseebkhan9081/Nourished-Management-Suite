@@ -361,8 +361,34 @@ export async function GET(request: Request) {
         }> = body.donations ?? []
         if (rows.length > 0) {
           benevityHasData = true
+          // Fetch disbursement_id → bank-deposit-date map so we attribute
+          // Benevity donations to the month the money actually landed in
+          // Wells Fargo. This reconciles the donor report with the main
+          // dashboard's bank-date view.
+          const disbursementToBankDate = new Map<string, string>()
+          try {
+            const txRes = await fetch(`${apiBase}/transactions`, { cache: "no-store" })
+            if (txRes.ok) {
+              const txBody = await txRes.json()
+              for (const tx of (txBody.transactions ?? [])) {
+                const details = (tx.details ?? "").toUpperCase()
+                if (!(details.includes("AMER ONLINE GIV") || details.includes("BENEV") || details.includes("CYBERGRANT") || details.includes("REF*TN*"))) continue
+                const m = (tx.details ?? "").match(/(REF\*TN\*|ACH_?)([A-Z0-9]+)/i)
+                if (m) {
+                  const key = m[0].toUpperCase().startsWith("REF*TN*") ? m[2].toUpperCase() : `ACH_${m[2]}`
+                  disbursementToBankDate.set(key, new Date(tx.date).toISOString().slice(0, 7))
+                }
+              }
+            }
+          } catch {}
+
           for (const r of rows) {
-            const mk = (new Date(r.donation_date).toISOString() ?? "").slice(0, 7)
+            // Prefer bank-deposit month when we can map the disbursement;
+            // fall back to donation_date for rows whose disbursement hasn't
+            // hit the bank yet.
+            const disbId = (r as any).disbursement_id ? String((r as any).disbursement_id).toUpperCase() : null
+            const bankMk = disbId ? disbursementToBankDate.get(disbId) : undefined
+            const mk = bankMk ?? (new Date(r.donation_date).toISOString() ?? "").slice(0, 7)
             if (!mk || !months.includes(mk)) continue
             // Dedupe by email (falls back to donor name if email missing)
             const key = r.donor_email

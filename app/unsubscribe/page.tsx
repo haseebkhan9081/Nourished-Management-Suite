@@ -43,7 +43,15 @@ function UnsubscribeInner() {
           email: s.email,
         })
       } catch (err: any) {
-        setView({ state: "error", message: err.message || "Link is invalid" })
+        // Only fail-hard on a genuinely invalid token. For backend hiccups or
+        // transitional deploy states (endpoint missing, 5xx, network), default
+        // to the subscribed view so the user can still act — the unsubscribe /
+        // resubscribe endpoints validate the token themselves.
+        if (err?.code === "invalid_token") {
+          setView({ state: "invalid" })
+        } else {
+          setView({ state: "subscribed", email: email.toLowerCase() })
+        }
       }
     })()
   }, [email, token])

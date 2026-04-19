@@ -248,7 +248,16 @@ export async function checkSubscription(email: string, token: string) {
     `${API_BASE}/outreach/subscription?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`,
     { cache: "no-store" },
   )
-  if (!res.ok) throw new Error("Subscription check failed")
+  if (res.status === 403) {
+    const err: any = new Error("Invalid or expired unsubscribe link")
+    err.code = "invalid_token"
+    throw err
+  }
+  if (!res.ok) {
+    const err: any = new Error("Subscription check unavailable")
+    err.code = "unavailable"
+    throw err
+  }
   return res.json() as Promise<{
     email: string
     unsubscribed: boolean

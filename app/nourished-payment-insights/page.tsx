@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import * as XLSX from "xlsx-js-style"
-import { Download, ChevronDown, ChevronUp } from "lucide-react"
+import { Download, ChevronDown, ChevronUp, Loader2 } from "lucide-react"
 import { Line, Doughnut, Bar } from "react-chartjs-2"
 import {
   Chart as ChartJS,
@@ -137,6 +137,56 @@ function formatMonthLabel(ym: string) {
   return date.toLocaleString("en-US", { month: "short", year: "numeric" })
 }
 
+// "YYYY-Qn" from a transaction date. Jan-Mar = Q1, etc.
+function quarterKey(dateStr: string): string {
+  const d = new Date(dateStr)
+  const y = d.getUTCFullYear()
+  const q = Math.floor(d.getUTCMonth() / 3) + 1
+  return `${y}-Q${q}`
+}
+
+// Sortable enumeration: "2024-Q3" → "2024-Q3". String comparison works.
+function cmpQuarter(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+// Human label: "2026-Q1" → "Q1 2026"
+function formatQuarterLabel(qk: string) {
+  const [y, q] = qk.split("-")
+  return `${q} ${y}`
+}
+
+// For a given quarter key, return [startDate, endDate) so drill-down can filter.
+function quarterRange(qk: string): [Date, Date] {
+  const [yStr, qStr] = qk.split("-")
+  const y = Number(yStr)
+  const q = Number(qStr.replace("Q", ""))
+  const start = new Date(Date.UTC(y, (q - 1) * 3, 1))
+  const end = new Date(Date.UTC(y, q * 3, 1))
+  return [start, end]
+}
+
+// Map a Category to the QoQ table row it belongs in. Keeps the matrix legible
+// by collapsing the classify() output into 5 income rows + 1 outflow row.
+type QoQRow = "stripe" | "corporate" | "checks" | "direct" | "other_in" | "outflow"
+const QOQ_ROW_META: Record<QoQRow, { label: string; color: string; group: "income" | "expense" }> = {
+  stripe:    { label: "Stripe",                     color: "#6772E5", group: "income"  },
+  corporate: { label: "Corporate / Platform",       color: "#4F8A70", group: "income"  },
+  checks:    { label: "Check Deposits",             color: "#8FA889", group: "income"  },
+  direct:    { label: "Direct Transfers",           color: "#C9DCC5", group: "income"  },
+  other_in:  { label: "Other Inflow",               color: "#D1D5DB", group: "income"  },
+  outflow:   { label: "Outflows (deployment + ops)", color: "#D97757", group: "expense" },
+}
+function qoqRowOf(tx: Transaction): QoQRow {
+  const cat = classify(tx)
+  if (CATEGORY_META[cat].group === "expense") return "outflow"
+  if (cat === "stripe") return "stripe"
+  if (cat === "corporate_giving") return "corporate"
+  if (cat === "check_deposit") return "checks"
+  if (cat === "direct_transfer") return "direct"
+  return "other_in"
+}
+
 function sumAbs(txns: Transaction[]) {
   return txns.reduce((s, tx) => s + Math.abs(Number(tx.amount)), 0)
 }
@@ -229,6 +279,37 @@ export default function NourishedPaymentInsightsPage() {
   const [explorerChannel, setExplorerChannel] = useState<"all" | Channel>("all")
   const [explorerExpanded, setExplorerExpanded] = useState(false)
 
+  const [purposeRequestOpen, setPurposeRequestOpen] = useState(false)
+  const [drillCategory, setDrillCategory] = useState<"zakat" | "sadaqah" | "charity" | null>(null)
+  const [qoqDrill, setQoqDrill] = useState<{ quarter: string; row: QoQRow | "TOTAL" } | null>(null)
+
+  // Purpose breakdown + top donors (Zakat / Sadaqah / Donation)
+  const [purposeData, setPurposeData] = useState<{
+    totals: {
+      zakat: { amount: number; gifts: number }
+      sadaqah: { amount: number; gifts: number }
+      charity: { amount: number; gifts: number }
+    }
+    topDonors: Array<{
+      email: string
+      name: string
+      total: number
+      gifts: number
+      sources: string[]
+      purposeTotals: { zakat: number; sadaqah: number; charity: number }
+    }>
+    uniqueDonors: number
+  } | null>(null)
+
+  useEffect(() => {
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
+    if (!apiBase) return
+    fetch(`${apiBase}/reports/donor-purpose?limit=10`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => data && setPurposeData(data))
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     const fetchTransactions = async () => {
       try {
@@ -291,6 +372,76 @@ export default function NourishedPaymentInsightsPage() {
   const deploymentRatio = totalRaisedAllTime > 0
     ? Math.round((totalDeployedToPakistan / totalRaisedAllTime) * 100)
     : 0
+
+  // ── Quarter-over-quarter matrix ───────────────────────────────────────────
+  // Build a row-by-quarter table from the reversal-netted dataset. Each row
+  // is a channel (Stripe / Corporate / Checks / etc.) and each column is a
+  // calendar quarter. Used for the QoQ section + drill-downs.
+  const qoqData = useMemo(() => {
+    const byRowByQ: Record<QoQRow, Record<string, number>> = {
+      stripe: {}, corporate: {}, checks: {}, direct: {}, other_in: {}, outflow: {},
+    }
+    const quarterSet = new Set<string>()
+    for (const tx of all) {
+      const q = quarterKey(tx.date)
+      if (!q) continue
+      quarterSet.add(q)
+      const row = qoqRowOf(tx)
+      const amt = row === "outflow" ? Math.abs(Number(tx.amount)) : Number(tx.amount)
+      byRowByQ[row][q] = (byRowByQ[row][q] || 0) + amt
+    }
+    const quarters = Array.from(quarterSet).sort(cmpQuarter)
+    // Column totals by quarter — income rows only for the "Total Raised" row.
+    const incomeTotals: Record<string, number> = {}
+    const netTotals: Record<string, number> = {}
+    for (const q of quarters) {
+      let inc = 0
+      let out = 0
+      for (const row of Object.keys(byRowByQ) as QoQRow[]) {
+        const v = byRowByQ[row][q] || 0
+        if (row === "outflow") out += v
+        else inc += v
+      }
+      incomeTotals[q] = inc
+      netTotals[q] = inc - out
+    }
+    return { byRowByQ, quarters, incomeTotals, netTotals }
+  }, [all])
+
+  // ── QoQ-driven KPIs ───────────────────────────────────────────────────────
+  const qoqKpis = useMemo(() => {
+    const qs = qoqData.quarters
+    if (qs.length === 0) {
+      return { current: 0, prior: 0, qoqPct: null as number | null, trailing4: 0, best: 0, bestQ: "—", yoyPct: null as number | null, currentLabel: "—", priorLabel: "—" }
+    }
+    const current = qs[qs.length - 1]
+    const prior = qs.length > 1 ? qs[qs.length - 2] : null
+    const sameQtrLastYear = (() => {
+      const [y, q] = current.split("-")
+      const prev = `${Number(y) - 1}-${q}`
+      return qs.includes(prev) ? prev : null
+    })()
+    const trailing4 = qs.slice(-4).reduce((s, q) => s + (qoqData.incomeTotals[q] || 0), 0)
+    let best = 0, bestQ = "—"
+    for (const q of qs) {
+      const v = qoqData.incomeTotals[q] || 0
+      if (v > best) { best = v; bestQ = q }
+    }
+    const currentV = qoqData.incomeTotals[current] || 0
+    const priorV = prior ? (qoqData.incomeTotals[prior] || 0) : 0
+    const yoyV = sameQtrLastYear ? (qoqData.incomeTotals[sameQtrLastYear] || 0) : 0
+    return {
+      current: currentV,
+      prior: priorV,
+      qoqPct: priorV > 0 ? ((currentV - priorV) / priorV) * 100 : null,
+      trailing4,
+      best,
+      bestQ,
+      yoyPct: yoyV > 0 ? ((currentV - yoyV) / yoyV) * 100 : null,
+      currentLabel: formatQuarterLabel(current),
+      priorLabel: prior ? formatQuarterLabel(prior) : "—",
+    }
+  }, [qoqData])
 
   // ── US Operations metrics (always computed from full set) ─────────────────
   const usOpsTxns = useMemo(
@@ -1121,6 +1272,291 @@ export default function NourishedPaymentInsightsPage() {
         </div>
       )}
 
+      {/* Quarter-over-Quarter */}
+      {qoqData.quarters.length > 0 && (
+        <section className="mt-4 bg-white rounded-xl shadow-md ring-1 ring-gray-200 overflow-hidden border-t-4 border-[#4F8A70]">
+          <div className="px-6 py-5 border-b bg-gradient-to-r from-[#F3F8F0] to-white">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-1.5 h-6 rounded-full bg-[#4F8A70]" />
+              <h3 className="text-gray-900 font-bold text-lg tracking-tight">Quarter-over-Quarter</h3>
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5 ml-3.5">
+              Bank-based view (reversal pairs excluded). Click any cell for the underlying transactions.
+            </p>
+          </div>
+
+          {/* KPI strip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 border-b bg-gray-50/70">
+            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+              <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">
+                {qoqKpis.currentLabel} (current)
+              </p>
+              <p className="text-2xl font-bold text-gray-900 mt-1.5">{formatCurrency(qoqKpis.current)}</p>
+              {qoqKpis.qoqPct !== null && (
+                <p className={`text-xs mt-1 font-medium ${qoqKpis.qoqPct >= 0 ? "text-green-600" : "text-red-500"}`}>
+                  {qoqKpis.qoqPct >= 0 ? "▲" : "▼"} {Math.abs(qoqKpis.qoqPct).toFixed(0)}% vs {qoqKpis.priorLabel}
+                </p>
+              )}
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+              <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">
+                {qoqKpis.priorLabel} (prior)
+              </p>
+              <p className="text-2xl font-bold text-gray-900 mt-1.5">{formatCurrency(qoqKpis.prior)}</p>
+              {qoqKpis.yoyPct !== null && (
+                <p className={`text-xs mt-1 font-medium ${qoqKpis.yoyPct >= 0 ? "text-green-600" : "text-red-500"}`}>
+                  YoY: {qoqKpis.yoyPct >= 0 ? "▲" : "▼"} {Math.abs(qoqKpis.yoyPct).toFixed(0)}%
+                </p>
+              )}
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+              <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Trailing 4 quarters</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1.5">{formatCurrency(qoqKpis.trailing4)}</p>
+              <p className="text-xs text-gray-500 mt-1">rolling TTM</p>
+            </div>
+            <div className="bg-white rounded-lg border border-[#4F8A70]/30 p-4 shadow-sm bg-gradient-to-br from-white to-[#F3F8F0]">
+              <p className="text-[10px] uppercase tracking-wider text-[#4F8A70] font-semibold">Best quarter</p>
+              <p className="text-2xl font-bold text-[#4F8A70] mt-1.5">{formatCurrency(qoqKpis.best)}</p>
+              <p className="text-xs text-gray-500 mt-1">{formatQuarterLabel(qoqKpis.bestQ)}</p>
+            </div>
+          </div>
+
+          {/* Quarterly table */}
+          <div className="overflow-x-auto p-2">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-100 text-xs uppercase tracking-wider text-gray-600">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold sticky left-0 bg-gray-100 z-10">Channel</th>
+                  {qoqData.quarters.map((q) => (
+                    <th key={q} className="px-4 py-3 text-right font-semibold whitespace-nowrap">
+                      {formatQuarterLabel(q)}
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 text-right font-semibold whitespace-nowrap bg-gray-200/70">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {(Object.keys(QOQ_ROW_META) as QoQRow[]).map((row, idx) => {
+                  const meta = QOQ_ROW_META[row]
+                  const rowTotal = qoqData.quarters.reduce(
+                    (s, q) => s + (qoqData.byRowByQ[row][q] || 0),
+                    0,
+                  )
+                  if (rowTotal === 0) return null
+                  const zebra = idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+                  return (
+                    <tr key={row} className={`${zebra} hover:bg-[#F3F8F0]/60 transition-colors`}>
+                      <td className={`px-4 py-3 sticky left-0 ${zebra} z-10 whitespace-nowrap`}>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full ring-2 ring-white" style={{ backgroundColor: meta.color }} />
+                          <span className="text-gray-800 font-medium">{meta.label}</span>
+                        </span>
+                      </td>
+                      {qoqData.quarters.map((q) => {
+                        const v = qoqData.byRowByQ[row][q] || 0
+                        return (
+                          <td
+                            key={q}
+                            className={`px-4 py-3 text-right tabular-nums cursor-pointer transition-colors ${
+                              v > 0 ? "text-gray-900 hover:bg-[#F3F8F0] hover:text-[#4F8A70] hover:font-semibold" : "text-gray-300"
+                            }`}
+                            onClick={() => v > 0 && setQoqDrill({ quarter: q, row })}
+                          >
+                            {v > 0 ? formatCurrency(v) : "—"}
+                          </td>
+                        )
+                      })}
+                      <td className="px-4 py-3 text-right tabular-nums font-semibold bg-gray-100/70 text-gray-900">
+                        {formatCurrency(rowTotal)}
+                      </td>
+                    </tr>
+                  )
+                })}
+                {/* Total raised row */}
+                <tr className="border-t-2 border-[#4F8A70]/40 bg-[#F3F8F0]/70">
+                  <td className="px-4 py-3.5 sticky left-0 bg-[#F3F8F0]/70 z-10 font-bold text-gray-900">
+                    Total Raised
+                  </td>
+                  {qoqData.quarters.map((q) => (
+                    <td
+                      key={q}
+                      className="px-4 py-3.5 text-right tabular-nums font-bold cursor-pointer hover:bg-[#E2EEDC] hover:text-[#4F8A70] transition-colors"
+                      onClick={() => setQoqDrill({ quarter: q, row: "TOTAL" })}
+                    >
+                      {formatCurrency(qoqData.incomeTotals[q] || 0)}
+                    </td>
+                  ))}
+                  <td className="px-4 py-3.5 text-right tabular-nums font-bold bg-[#E2EEDC] text-[#4F8A70]">
+                    {formatCurrency(qoqData.quarters.reduce((s, q) => s + (qoqData.incomeTotals[q] || 0), 0))}
+                  </td>
+                </tr>
+                {/* Net row (raised - outflow) */}
+                <tr className="bg-gray-50/60">
+                  <td className="px-4 py-2.5 sticky left-0 bg-gray-50/60 z-10 text-gray-600 text-xs italic">
+                    Net (raised − outflow)
+                  </td>
+                  {qoqData.quarters.map((q) => {
+                    const net = qoqData.netTotals[q] || 0
+                    return (
+                      <td key={q} className={`px-4 py-2.5 text-right tabular-nums text-xs italic ${net >= 0 ? "text-gray-600" : "text-red-500 font-semibold"}`}>
+                        {formatCurrency(net)}
+                      </td>
+                    )
+                  })}
+                  <td className="px-4 py-2.5 text-right tabular-nums text-xs italic bg-gray-100/70 font-semibold text-gray-700">
+                    {formatCurrency(qoqData.quarters.reduce((s, q) => s + (qoqData.netTotals[q] || 0), 0))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* Purpose Breakdown — Zakat / Sadaqah / General Donation */}
+      {purposeData && (
+        <div className="bg-white rounded-lg shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-gray-800 font-semibold">Giving by Purpose</h3>
+            <p className="text-xs text-gray-400">
+              Donations without a specified purpose are counted as General.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={() => setDrillCategory("zakat")}
+              className="text-left rounded-lg border border-[#D4A574]/30 bg-gradient-to-br from-[#FFF5E0] to-[#FDEBC8] p-4 hover:border-[#D4A574] hover:shadow-md transition group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4A574]"
+            >
+              <p className="text-xs font-semibold tracking-wider uppercase text-[#B8894F] flex items-center justify-between">
+                Zakat
+                <span className="text-[10px] opacity-0 group-hover:opacity-100 transition">click to view →</span>
+              </p>
+              <p className="text-2xl font-bold text-[#8B6521] mt-2">
+                {formatCurrency(purposeData.totals.zakat.amount)}
+              </p>
+              <p className="text-xs text-[#8B6521]/70 mt-1">
+                {purposeData.totals.zakat.gifts} gift{purposeData.totals.zakat.gifts === 1 ? "" : "s"}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrillCategory("sadaqah")}
+              className="text-left rounded-lg border border-[#A2BD9D]/30 bg-gradient-to-br from-[#F3F8F0] to-[#E2EEDB] p-4 hover:border-[#A2BD9D] hover:shadow-md transition group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A2BD9D]"
+            >
+              <p className="text-xs font-semibold tracking-wider uppercase text-[#5F8571] flex items-center justify-between">
+                Sadaqah
+                <span className="text-[10px] opacity-0 group-hover:opacity-100 transition">click to view →</span>
+              </p>
+              <p className="text-2xl font-bold text-[#3D5A4B] mt-2">
+                {formatCurrency(purposeData.totals.sadaqah.amount)}
+              </p>
+              <p className="text-xs text-[#3D5A4B]/70 mt-1">
+                {purposeData.totals.sadaqah.gifts} gift{purposeData.totals.sadaqah.gifts === 1 ? "" : "s"}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrillCategory("charity")}
+              className="text-left rounded-lg border border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 p-4 hover:border-gray-400 hover:shadow-md transition group focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+            >
+              <p className="text-xs font-semibold tracking-wider uppercase text-gray-600 flex items-center justify-between">
+                Charity
+                <span className="text-[10px] opacity-0 group-hover:opacity-100 transition">click to view →</span>
+              </p>
+              <p className="text-2xl font-bold text-gray-800 mt-2">
+                {formatCurrency(purposeData.totals.charity.amount)}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {purposeData.totals.charity.gifts} gift{purposeData.totals.charity.gifts === 1 ? "" : "s"}
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Top Donors */}
+      {purposeData && purposeData.topDonors.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h3 className="text-gray-800 font-semibold">
+                Top Donors (All-Time)
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Aggregated across Stripe, Benevity, and bank-attached gifts. {purposeData.uniqueDonors} unique donors in total.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPurposeRequestOpen(true)}
+                className="text-xs px-3 py-1.5 rounded-md border border-[#A2BD9D] text-[#5F8571] bg-[#F3F8F0] hover:bg-[#E8F1E4]"
+              >
+                Ask donors to categorize
+              </button>
+              <a
+                href="/nourished-payment-insights/donor-report"
+                className="text-xs text-[#5F8571] hover:underline"
+              >
+                View full donor report →
+              </a>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th className="px-5 py-3 text-left font-semibold">#</th>
+                  <th className="px-5 py-3 text-left font-semibold">Donor</th>
+                  <th className="px-5 py-3 text-right font-semibold">Total</th>
+                  <th className="px-5 py-3 text-right font-semibold">Gifts</th>
+                  <th className="px-5 py-3 text-right font-semibold text-[#B8894F]">Zakat</th>
+                  <th className="px-5 py-3 text-right font-semibold text-[#5F8571]">Sadaqah</th>
+                  <th className="px-5 py-3 text-right font-semibold text-gray-700">Charity</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {purposeData.topDonors.map((d, i) => (
+                  <tr key={d.email} className="hover:bg-gray-50">
+                    <td className="px-5 py-3 text-gray-400 font-mono tabular-nums">
+                      {i + 1}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="font-medium text-gray-900">{d.name || "Anonymous"}</div>
+                      <div className="text-xs text-gray-500 truncate max-w-[280px]">{d.email}</div>
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold text-gray-900 tabular-nums">
+                      {formatCurrency(d.total)}
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-600 tabular-nums">{d.gifts}</td>
+                    <td className="px-5 py-3 text-right tabular-nums">
+                      {d.purposeTotals.zakat > 0 ? (
+                        <span className="text-[#8B6521]">{formatCurrency(d.purposeTotals.zakat)}</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-right tabular-nums">
+                      {d.purposeTotals.sadaqah > 0 ? (
+                        <span className="text-[#5F8571]">{formatCurrency(d.purposeTotals.sadaqah)}</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-right tabular-nums text-gray-700">
+                      {d.purposeTotals.charity > 0
+                        ? formatCurrency(d.purposeTotals.charity)
+                        : <span className="text-gray-300">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Transaction Explorer */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="px-4 py-4 border-b space-y-3">
@@ -1264,6 +1700,648 @@ export default function NourishedPaymentInsightsPage() {
           </div>
         )}
       </div>
+
+      {purposeRequestOpen && (
+        <PurposeRequestDialog onClose={() => setPurposeRequestOpen(false)} />
+      )}
+
+      {drillCategory && (
+        <PurposeDrillDialog
+          category={drillCategory}
+          onClose={() => setDrillCategory(null)}
+        />
+      )}
+
+      {qoqDrill && (
+        <QoQDrillDialog
+          quarter={qoqDrill.quarter}
+          row={qoqDrill.row}
+          transactions={all}
+          onClose={() => setQoqDrill(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── QoQ drill-down: shows the raw transactions in a specific cell ──────────
+function QoQDrillDialog({
+  quarter,
+  row,
+  transactions,
+  onClose,
+}: {
+  quarter: string
+  row: QoQRow | "TOTAL"
+  transactions: Array<Transaction & { _cat: Category }>
+  onClose: () => void
+}) {
+  const [start, end] = quarterRange(quarter)
+  const filtered = transactions.filter((tx) => {
+    const d = new Date(tx.date)
+    if (d < start || d >= end) return false
+    if (row === "TOTAL") return Number(tx.amount) > 0 // income only
+    return qoqRowOf(tx) === row
+  })
+  const total = filtered.reduce(
+    (s, tx) =>
+      s + (row === "outflow" ? Math.abs(Number(tx.amount)) : Number(tx.amount)),
+    0,
+  )
+  const rowLabel = row === "TOTAL" ? "Total Raised" : QOQ_ROW_META[row].label
+
+  function downloadCsv() {
+    const rows = [
+      ["Date", "Amount", "Details"].join(","),
+      ...filtered
+        .sort((a, b) => (a.date < b.date ? 1 : -1))
+        .map((tx) =>
+          [
+            String(tx.date).slice(0, 10),
+            Number(tx.amount).toFixed(2),
+            `"${(tx.details ?? "").replace(/"/g, '""')}"`,
+          ].join(","),
+        ),
+    ].join("\n")
+    const blob = new Blob([rows], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${rowLabel.toLowerCase().replace(/\s+/g, "-")}-${quarter}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div className="px-5 py-4 border-b flex items-start justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900">
+              {rowLabel} · {formatQuarterLabel(quarter)}
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {filtered.length} transaction{filtered.length === 1 ? "" : "s"} · {formatCurrency(total)} total
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadCsv}
+              disabled={filtered.length === 0}
+              className="text-xs px-3 py-1.5 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-700 text-xl leading-none px-2"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="p-10 text-center text-sm text-gray-400">
+              No transactions in this cell.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 sticky top-0 text-xs uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th className="px-5 py-2.5 text-left font-semibold">Date</th>
+                  <th className="px-5 py-2.5 text-right font-semibold">Amount</th>
+                  <th className="px-5 py-2.5 text-left font-semibold">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered
+                  .sort((a, b) => (a.date < b.date ? 1 : -1))
+                  .map((tx) => {
+                    const amt = Number(tx.amount)
+                    return (
+                      <tr key={tx.id} className="hover:bg-gray-50">
+                        <td className="px-5 py-2 text-gray-600 tabular-nums whitespace-nowrap">
+                          {String(tx.date).slice(0, 10)}
+                        </td>
+                        <td
+                          className={`px-5 py-2 text-right tabular-nums font-semibold ${
+                            amt < 0 ? "text-red-500" : "text-gray-900"
+                          }`}
+                        >
+                          {formatCurrency(amt)}
+                        </td>
+                        <td className="px-5 py-2 text-xs text-gray-600 font-mono truncate max-w-[520px]">
+                          {tx.details ?? "—"}
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Purpose drill-down dialog ────────────────────────────────────────────
+function PurposeDrillDialog({
+  category,
+  onClose,
+}: {
+  category: "zakat" | "sadaqah" | "charity"
+  onClose: () => void
+}) {
+  type Gift = {
+    id: string
+    name: string
+    email: string
+    amount: number
+    giftDate: string
+    source: string
+    storedPurpose: string | null
+  }
+  const [data, setData] = useState<{
+    gifts: Gift[]
+    total: number
+    count: number
+  } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
+
+  useEffect(() => {
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
+    if (!apiBase) return
+    fetch(
+      `${apiBase}/reports/donor-purpose/drill?category=${category}`,
+      { cache: "no-store" },
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setData(d))
+      .catch(() => setError("Could not load drill-down data"))
+  }, [category])
+
+  const labels: Record<typeof category, { title: string; accent: string; headerBg: string; accentText: string }> = {
+    zakat: { title: "Zakat", accent: "#D4A574", headerBg: "#FFF5E0", accentText: "#8B6521" },
+    sadaqah: { title: "Sadaqah", accent: "#A2BD9D", headerBg: "#F3F8F0", accentText: "#3D5A4B" },
+    charity: { title: "Charity", accent: "#9CA3AF", headerBg: "#F9FAFB", accentText: "#374151" },
+  }
+  const L = labels[category]
+
+  const filtered = useMemo(() => {
+    if (!data) return []
+    const q = search.trim().toLowerCase()
+    if (!q) return data.gifts
+    return data.gifts.filter(
+      (g) =>
+        g.name.toLowerCase().includes(q) ||
+        g.email.includes(q) ||
+        g.source.toLowerCase().includes(q),
+    )
+  }, [data, search])
+
+  function downloadCsv() {
+    if (!data) return
+    const rows = [
+      ["Date", "Donor", "Email", "Amount", "Source", "Stored Purpose"].join(","),
+      ...data.gifts.map((g) =>
+        [
+          g.giftDate,
+          `"${(g.name || "").replace(/"/g, '""')}"`,
+          g.email,
+          g.amount.toFixed(2),
+          `"${g.source}"`,
+          `"${g.storedPurpose ?? ""}"`,
+        ].join(","),
+      ),
+    ].join("\n")
+    const blob = new Blob([rows], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${category}-gifts-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div
+          className="px-5 py-4 border-b flex items-start justify-between"
+          style={{ backgroundColor: L.headerBg }}
+        >
+          <div>
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <span
+                className="inline-block w-2 h-2 rounded-full"
+                style={{ backgroundColor: L.accent }}
+              />
+              {L.title} · drill-down
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {data
+                ? `${data.count} gift${data.count === 1 ? "" : "s"} · ${formatCurrency(data.total)} total`
+                : "Loading…"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadCsv}
+              disabled={!data}
+              className="text-xs px-3 py-1.5 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-700 text-xl leading-none px-2"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div className="px-5 pt-3 pb-2 border-b">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by donor name, email, or source…"
+            className="w-full text-sm border border-gray-200 rounded px-3 py-1.5 focus:outline-none focus:border-[#A2BD9D] focus:ring-1 focus:ring-[#A2BD9D]"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {error ? (
+            <div className="p-6 text-sm text-red-600">{error}</div>
+          ) : !data ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-[#A2BD9D]" />
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 sticky top-0 text-xs uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th className="px-5 py-2.5 text-left font-semibold">Date</th>
+                  <th className="px-5 py-2.5 text-left font-semibold">Donor</th>
+                  <th className="px-5 py-2.5 text-right font-semibold">Amount</th>
+                  <th className="px-5 py-2.5 text-left font-semibold">Source</th>
+                  <th className="px-5 py-2.5 text-left font-semibold">Stored Label</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((g) => (
+                  <tr key={g.id} className="hover:bg-gray-50">
+                    <td className="px-5 py-2.5 text-gray-600 tabular-nums">
+                      {String(g.giftDate).slice(0, 10)}
+                    </td>
+                    <td className="px-5 py-2.5">
+                      <div className="font-medium text-gray-900 truncate max-w-[240px]">
+                        {g.name || "Anonymous"}
+                      </div>
+                      {g.email && (
+                        <div className="text-xs text-gray-500 truncate max-w-[240px]">
+                          {g.email}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-5 py-2.5 text-right font-semibold tabular-nums text-gray-900">
+                      {formatCurrency(g.amount)}
+                    </td>
+                    <td className="px-5 py-2.5 text-xs text-gray-600">{g.source}</td>
+                    <td className="px-5 py-2.5 text-xs text-gray-500">
+                      {g.storedPurpose || <span className="text-gray-300">—</span>}
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-10 text-center text-gray-400 text-sm">
+                      No gifts match your search.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Purpose-request dialog: picks donors with uncategorized gifts and
+//     sends them an email linking to the /my-gifts page ─────────────────────
+function PurposeRequestDialog({ onClose }: { onClose: () => void }) {
+  type Candidate = {
+    email: string
+    name: string
+    total: number
+    gifts: number
+    needsPurpose: number
+  }
+  const [candidates, setCandidates] = useState<Candidate[] | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [status, setStatus] = useState<"idle" | "sending" | "done" | "error">("idle")
+  const [result, setResult] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [testEmail, setTestEmail] = useState("")
+  const [testStatus, setTestStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Use the dedicated endpoint that only returns donors with truly
+    // uncategorized gifts (NULL purpose). Already-tagged donors like Fawad,
+    // Khurram, Salman don't show up here even though they're top donors.
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
+    if (!apiBase) return
+    fetch(`${apiBase}/donor/need-purpose-candidates`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return
+        const cs: Candidate[] = data.candidates
+        setCandidates(cs)
+        // Pre-select the top 10 of the already-filtered list
+        setSelected(new Set(cs.slice(0, 10).map((c) => c.email)))
+      })
+      .catch(() => setError("Could not load donor list"))
+  }, [])
+
+  // Fetch a preview. Uses the first selected donor if any, otherwise a sample.
+  async function loadPreview() {
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
+    const sample = Array.from(selected)[0] ?? ""
+    const url = `${apiBase}/donor/purpose-request-preview${sample ? `?email=${encodeURIComponent(sample)}` : ""}`
+    try {
+      const res = await fetch(url, { cache: "no-store" })
+      if (!res.ok) throw new Error("preview failed")
+      const data = await res.json()
+      setPreviewHtml(data.html)
+      setPreviewOpen(true)
+    } catch (err: any) {
+      setError(err.message || "Preview failed")
+    }
+  }
+
+  async function sendTestToMe() {
+    if (!testEmail) return
+    setTestStatus("sending")
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
+      const sample = Array.from(selected)[0] ?? ""
+      const res = await fetch(`${apiBase}/donor/send-purpose-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toEmail: testEmail, sampleEmail: sample || undefined }),
+      })
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}))
+        throw new Error(b.error || "Test send failed")
+      }
+      setTestStatus("sent")
+      setTimeout(() => setTestStatus(null), 4000)
+    } catch (err: any) {
+      setTestStatus(`error: ${err.message}`)
+    }
+  }
+
+  async function sendEmails() {
+    if (selected.size === 0) return
+    setStatus("sending")
+    setError(null)
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
+      const res = await fetch(`${apiBase}/donor/send-purpose-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: Array.from(selected) }),
+      })
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}))
+        throw new Error(b.error || "Send failed")
+      }
+      const data = await res.json()
+      setResult(data)
+      setStatus("done")
+    } catch (err: any) {
+      setError(err.message)
+      setStatus("error")
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="px-5 py-4 border-b flex items-start justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900">
+              Ask donors to categorize their gifts
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Each selected donor gets an email with a link to choose Zakat /
+              Sadaqah / Donation for their gifts.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 text-xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        {status === "done" && result ? (
+          <div className="p-6 space-y-4">
+            <div className="rounded-md bg-green-50 border border-green-200 p-4">
+              <p className="font-medium text-green-900">
+                {result.sent} email{result.sent === 1 ? "" : "s"} sent
+              </p>
+              <p className="text-sm text-green-800 mt-1">
+                {result.skipped > 0 && `${result.skipped} skipped (already fully categorized). `}
+                {result.failed > 0 && `${result.failed} failed.`}
+              </p>
+            </div>
+            {result.failed > 0 && (
+              <div className="text-xs border rounded bg-red-50 border-red-200 p-3">
+                <p className="font-medium text-red-800 mb-2">Failed deliveries:</p>
+                <ul className="space-y-1">
+                  {result.details
+                    .filter((d: any) => d.status === "failed")
+                    .map((d: any) => (
+                      <li key={d.email}>
+                        <span className="text-gray-700">{d.email}</span> —{" "}
+                        <span className="text-red-700">{d.error}</span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm bg-[#A2BD9D] hover:bg-[#8FA889] text-white rounded"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              {error && (
+                <div className="text-sm rounded-md bg-red-50 border border-red-200 text-red-700 p-3">
+                  {error}
+                </div>
+              )}
+              {!candidates ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-[#A2BD9D]" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center text-xs text-gray-500">
+                    <span>{selected.size} of {candidates.length} selected</span>
+                    <div className="flex gap-2">
+                      <button
+                        className="text-[#5F8571] hover:underline"
+                        onClick={() =>
+                          setSelected(new Set(candidates.map((c) => c.email)))
+                        }
+                      >
+                        Select all
+                      </button>
+                      <button
+                        className="text-gray-500 hover:underline"
+                        onClick={() => setSelected(new Set())}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                  <div className="border rounded-md divide-y divide-gray-100">
+                    {candidates.map((c) => {
+                      const checked = selected.has(c.email)
+                      return (
+                        <label
+                          key={c.email}
+                          className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = new Set(selected)
+                              if (checked) next.delete(c.email)
+                              else next.add(c.email)
+                              setSelected(next)
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-gray-900 truncate">
+                              {c.name || c.email}
+                            </div>
+                            <div className="text-xs text-gray-500 truncate">
+                              {c.email}
+                            </div>
+                          </div>
+                          <div className="text-right text-xs text-gray-600 tabular-nums whitespace-nowrap">
+                            <div className="font-semibold text-gray-900">
+                              ${c.total.toLocaleString()}
+                            </div>
+                            <div className="text-gray-500">
+                              {c.gifts} gift{c.gifts === 1 ? "" : "s"}
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="email"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  placeholder="you@nourishedusa.org"
+                  className="flex-1 min-w-[200px] text-sm border border-gray-200 rounded px-3 py-1.5 focus:outline-none focus:border-[#A2BD9D] focus:ring-1 focus:ring-[#A2BD9D]"
+                />
+                <button
+                  onClick={sendTestToMe}
+                  disabled={!testEmail || testStatus === "sending"}
+                  className="px-3 py-1.5 text-xs border border-[#A2BD9D] text-[#5F8571] rounded hover:bg-[#F3F8F0] disabled:opacity-50"
+                >
+                  {testStatus === "sending" ? "Sending…" : "Send test to me"}
+                </button>
+                <button
+                  onClick={loadPreview}
+                  className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                >
+                  Preview email
+                </button>
+              </div>
+              {testStatus === "sent" && (
+                <p className="text-xs text-green-700">✓ Test email sent — check your inbox.</p>
+              )}
+              {testStatus?.startsWith("error") && (
+                <p className="text-xs text-red-600">{testStatus}</p>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm border border-gray-200 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={sendEmails}
+                  disabled={status === "sending" || selected.size === 0}
+                  className="px-4 py-2 text-sm bg-[#A2BD9D] hover:bg-[#8FA889] text-white rounded disabled:opacity-50"
+                >
+                  {status === "sending"
+                    ? "Sending…"
+                    : `Send to ${selected.size} donor${selected.size === 1 ? "" : "s"}`}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {previewOpen && previewHtml && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="px-5 py-3 border-b flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900 text-sm">Email Preview</h3>
+                <p className="text-xs text-gray-500">
+                  Exactly what {Array.from(selected)[0] ? `${Array.from(selected)[0]}` : "each recipient"} will see
+                </p>
+              </div>
+              <button
+                onClick={() => setPreviewOpen(false)}
+                className="text-gray-400 hover:text-gray-700 text-xl leading-none px-2"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden bg-gray-100 p-2">
+              <iframe
+                title="Email preview"
+                srcDoc={previewHtml}
+                className="w-full h-full bg-white border border-gray-200 rounded"
+                style={{ minHeight: "60vh" }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

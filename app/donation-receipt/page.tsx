@@ -422,6 +422,7 @@ async function attachBankTransactions(payload: {
   postalCode?: string;
   country?: string;
   saveEmailForFuture: boolean;
+  purpose?: "Zakat" | "Sadaqah" | "Charity";
 }): Promise<any> {
   const res = await fetch(`${API_BASE}/receipt/bank-transaction/attach`, {
     method: "POST",
@@ -1601,6 +1602,9 @@ function BankDonorCard({
   const [postalCode, setPostalCode] = useState("");
   const [country, setCountry] = useState("");
   const [saveForFuture, setSaveForFuture] = useState(!donor.savedEmail);
+  const [purpose, setPurpose] = useState<"Zakat" | "Sadaqah" | "Charity">(
+    "Charity",
+  );
   const [pendingTxIds, setPendingTxIds] = useState<Set<number>>(new Set());
 
   const unmatchedTxns = donor.transactions.filter((t) => !t.matched);
@@ -1623,6 +1627,7 @@ function BankDonorCard({
         postalCode: postalCode.trim() || undefined,
         country: country.trim() || undefined,
         saveEmailForFuture: saveForFuture,
+        purpose,
       });
       const count = res?.attached?.length ?? ids.length;
       onSent(
@@ -1744,6 +1749,31 @@ function BankDonorCard({
                 className="h-9 text-sm border-gray-200 focus-visible:ring-[#A2BD9D]"
               />
             </div>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+          <div className="text-xs font-medium text-gray-600 whitespace-nowrap">
+            Purpose (from check memo):
+          </div>
+          <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5">
+            {(["Zakat", "Sadaqah", "Charity"] as const).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setPurpose(opt)}
+                className={`px-3 py-1 text-xs font-medium rounded transition ${
+                  purpose === opt
+                    ? opt === "Zakat"
+                      ? "bg-[#FDEBC8] text-[#8B6521]"
+                      : opt === "Sadaqah"
+                      ? "bg-[#E2EEDB] text-[#3D5A4B]"
+                      : "bg-gray-100 text-gray-700"
+                    : "text-gray-500 hover:bg-gray-50"
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
           </div>
         </div>
         <label className="flex items-center gap-2 mt-3 text-xs text-gray-600 cursor-pointer select-none">

@@ -60,6 +60,7 @@ export async function POST(request: Request) {
     postalCode: string | null
     subscriptionId: string | null
     customerId: string | null
+    purpose: string | null
   }
 
   const charges: ChargePayload[] = []
@@ -107,6 +108,11 @@ export async function POST(request: Request) {
 
       const grossCents = charge.amount
       const refundedCents = charge.amount_refunded ?? 0
+      // Donation form on the public site writes the category into
+      // charge.metadata.purposeOfDonation ("Zakat" | "Sadaqah" | "General Fund"
+      // | …). Older charges predate this field — those stay null.
+      const purposeRaw = charge.metadata?.purposeOfDonation ?? null
+
       charges.push({
         paymentIntentId: charge.payment_intent,
         // Store the gross amount — we track refund separately so the UI can
@@ -124,6 +130,7 @@ export async function POST(request: Request) {
         postalCode,
         subscriptionId: subscriptionId ?? null,
         customerId: custId,
+        purpose: purposeRaw,
       })
     }
   } catch (err: any) {
