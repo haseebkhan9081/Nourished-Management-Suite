@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react"
 import * as XLSX from "xlsx-js-style"
 import { Download, ChevronDown, ChevronUp, Loader2 } from "lucide-react"
-import { Line, Doughnut, Bar } from "react-chartjs-2"
+import { Bar } from "react-chartjs-2"
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -282,6 +282,12 @@ export default function NourishedPaymentInsightsPage() {
   const [purposeRequestOpen, setPurposeRequestOpen] = useState(false)
   const [drillCategory, setDrillCategory] = useState<"zakat" | "sadaqah" | "charity" | null>(null)
   const [qoqDrill, setQoqDrill] = useState<{ quarter: string; row: QoQRow | "TOTAL" } | null>(null)
+  const [statDrill, setStatDrill] = useState<{
+    title: string
+    subtitle?: string
+    txns: Array<Transaction & { _cat: Category }>
+    amountMode: "credit" | "outflow" | "signed"
+  } | null>(null)
 
   // Purpose breakdown + top donors (Zakat / Sadaqah / Donation)
   const [purposeData, setPurposeData] = useState<{
@@ -669,42 +675,6 @@ export default function NourishedPaymentInsightsPage() {
     XLSX.writeFile(wb, filename)
   }
 
-  // ── Volume Over Time (last 30 days, only days with txns) ───────────────────
-  const lineData = useMemo(() => {
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - 30)
-    const map: Record<string, number> = {}
-    for (const tx of filtered) {
-      if (!tx.date) continue
-      const dObj = new Date(tx.date)
-      if (isNaN(dObj.getTime()) || dObj < cutoff) continue
-      const d = tx.date.split("T")[0]
-      map[d] = (map[d] || 0) + Math.abs(tx.amount)
-    }
-    const labels = Object.keys(map).sort()
-    return {
-      labels,
-      datasets: [{
-        label: "Daily Volume",
-        data: labels.map(l => map[l]),
-        borderColor: "#A2BD9D",
-        backgroundColor: "#A2BD9D33",
-        tension: 0.3,
-        fill: true,
-        pointRadius: 4,
-      }],
-    }
-  }, [filtered])
-
-  // ── Credits vs Debits doughnut ──────────────────────────────────────────────
-  const doughnutData = {
-    labels: ["Credits (In)", "Debits (Out)"],
-    datasets: [{
-      data: [totalCredits, totalDebits],
-      backgroundColor: ["#A2BD9D", "#E27D7D"],
-      hoverOffset: 10,
-    }],
-  }
 
   // ── MoM (credits per month, filter-aware) ──────────────────────────────────
   const momChart = useMemo(() => {
@@ -886,27 +856,6 @@ export default function NourishedPaymentInsightsPage() {
     },
   }
 
-  const doughnutOptions = {
-    plugins: {
-      legend: {
-        position: "bottom" as const,
-        labels: { color: "#374151", font: { weight: "500" } },
-      },
-      tooltip: {
-        backgroundColor: "rgba(17, 24, 39, 0.95)",
-        titleColor: "#ffffff",
-        bodyColor: "#ffffff",
-        padding: 10,
-        cornerRadius: 6,
-        callbacks: {
-          label: (ctx: any) => ` $${ctx.parsed.toLocaleString()}`,
-        },
-      },
-    },
-    responsive: true,
-    maintainAspectRatio: false,
-  }
-
   if (loading) {
     return <div className="flex items-center justify-center h-64"><p className="text-gray-400 text-sm">Loading transactions…</p></div>
   }
@@ -1008,14 +957,20 @@ export default function NourishedPaymentInsightsPage() {
       <div className={`grid grid-cols-2 gap-4 ${
         source === "stripe" ? "lg:grid-cols-3" : showDebits ? "lg:grid-cols-6" : "lg:grid-cols-5"
       }`}>
-        <div className="bg-white rounded-lg p-4 shadow-sm">
+        <div
+          className="bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md hover:ring-1 hover:ring-gray-200 transition"
+          onClick={() => setStatDrill({ title: "Current Balance", subtitle: "All transactions", txns: all, amountMode: "signed" })}
+        >
           <p className="text-sm text-gray-500">Current Balance</p>
           <p className={`text-2xl font-semibold ${currentBalance < 0 ? "text-red-500" : "text-gray-900"}`}>
             {formatCurrency(currentBalance)}
           </p>
         </div>
 
-        <div className="bg-white rounded-lg p-4 shadow-sm">
+        <div
+          className="bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md hover:ring-1 hover:ring-[#A2BD9D]/40 transition"
+          onClick={() => setStatDrill({ title: "Total Raised", subtitle: "All incoming credits", txns: credits, amountMode: "credit" })}
+        >
           <p className="text-sm text-gray-500">Total Raised</p>
           <p className="text-2xl font-semibold text-[#A2BD9D]">{formatCurrency(totalCredits)}</p>
           <div className="flex items-center gap-2 mt-1">
@@ -1038,7 +993,10 @@ export default function NourishedPaymentInsightsPage() {
         </div>
 
         {showDebits && (
-          <div className="bg-white rounded-lg p-4 shadow-sm">
+          <div
+            className="bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md hover:ring-1 hover:ring-red-200 transition"
+            onClick={() => setStatDrill({ title: "Total Outflow", subtitle: "All outgoing payments", txns: debits, amountMode: "outflow" })}
+          >
             <p className="text-sm text-gray-500">Total Outflow</p>
             <p className="text-2xl font-semibold text-red-400">{formatCurrency(totalDebits)}</p>
             <div className="flex items-center gap-2 mt-1">
@@ -1058,13 +1016,19 @@ export default function NourishedPaymentInsightsPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-lg p-4 shadow-sm">
+        <div
+          className="bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md hover:ring-1 hover:ring-gray-200 transition"
+          onClick={() => setStatDrill({ title: "All Transactions", subtitle: source === "all" ? "Full dataset" : `${source} filter`, txns: filtered, amountMode: "signed" })}
+        >
           <p className="text-sm text-gray-500">Transactions</p>
           <p className="text-2xl font-semibold">{totalCount.toLocaleString()}</p>
         </div>
 
         {source !== "stripe" && (
-          <div className="bg-white rounded-lg p-4 shadow-sm">
+          <div
+            className="bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md hover:ring-1 hover:ring-[#D97757]/30 transition"
+            onClick={() => setStatDrill({ title: "Pakistan Deployment", subtitle: `${deploymentRatio}% of total raised`, txns: pakistanTxns, amountMode: "outflow" })}
+          >
             <p className="text-sm text-gray-500">Deployment Ratio</p>
             <p className="text-2xl font-semibold text-[#D97757]">{deploymentRatio}%</p>
             <p className="text-xs text-gray-400 mt-1">of total raised to Pakistan</p>
@@ -1072,7 +1036,10 @@ export default function NourishedPaymentInsightsPage() {
         )}
 
         {source !== "stripe" && (
-          <div className="bg-white rounded-lg p-4 shadow-sm">
+          <div
+            className="bg-white rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md hover:ring-1 hover:ring-gray-200 transition"
+            onClick={() => setStatDrill({ title: "Cash Runway — Outflows (last 3 months)", subtitle: `${formatCurrency(cashRunway.avgMonthlyBurn)}/mo avg burn`, txns: all.filter(tx => tx.amount < 0 && new Date(tx.date).getTime() >= new Date(new Date().getFullYear(), new Date().getMonth() - 3, 1).getTime()), amountMode: "outflow" })}
+          >
             <p className="text-sm text-gray-500">Cash Runway</p>
             <p className={`text-2xl font-semibold ${
               cashRunway.months === null
@@ -1092,17 +1059,26 @@ export default function NourishedPaymentInsightsPage() {
 
       {/* Channel Totals — all-time breakdown by source, not affected by filter */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg p-5 shadow-sm border-l-4 border-[#6772E5]">
+        <div
+          className="bg-white rounded-lg p-5 shadow-sm border-l-4 border-[#6772E5] cursor-pointer hover:shadow-md hover:ring-1 hover:ring-[#6772E5]/30 transition"
+          onClick={() => setStatDrill({ title: "Stripe Deposits", subtitle: "Online donations", txns: all.filter(tx => tx.amount > 0 && channelOf(tx._cat, tx.amount) === "stripe"), amountMode: "credit" })}
+        >
           <p className="text-xs text-gray-500 uppercase tracking-wide">Stripe</p>
           <p className="text-2xl font-semibold text-[#6772E5] mt-1">{formatCurrency(channelTotals.stripe)}</p>
           <p className="text-xs text-gray-400 mt-1">{channelTotals.stripeCount} deposits · online donations</p>
         </div>
-        <div className="bg-white rounded-lg p-5 shadow-sm border-l-4 border-[#4F8A70]">
+        <div
+          className="bg-white rounded-lg p-5 shadow-sm border-l-4 border-[#4F8A70] cursor-pointer hover:shadow-md hover:ring-1 hover:ring-[#4F8A70]/30 transition"
+          onClick={() => setStatDrill({ title: "Benevity / Corporate", subtitle: "AOG + CyberGrants disbursements", txns: all.filter(tx => tx.amount > 0 && channelOf(tx._cat, tx.amount) === "benevity"), amountMode: "credit" })}
+        >
           <p className="text-xs text-gray-500 uppercase tracking-wide">Benevity / Corporate</p>
           <p className="text-2xl font-semibold text-[#4F8A70] mt-1">{formatCurrency(channelTotals.benevity)}</p>
           <p className="text-xs text-gray-400 mt-1">{channelTotals.benevityCount} disbursements · AOG + CyberGrants</p>
         </div>
-        <div className="bg-white rounded-lg p-5 shadow-sm border-l-4 border-[#8FA889]">
+        <div
+          className="bg-white rounded-lg p-5 shadow-sm border-l-4 border-[#8FA889] cursor-pointer hover:shadow-md hover:ring-1 hover:ring-[#8FA889]/30 transition"
+          onClick={() => setStatDrill({ title: "Direct Bank Deposits", subtitle: "Checks, transfers, other", txns: all.filter(tx => tx.amount > 0 && channelOf(tx._cat, tx.amount) === "bank_deposits"), amountMode: "credit" })}
+        >
           <p className="text-xs text-gray-500 uppercase tracking-wide">Direct Bank Deposits</p>
           <p className="text-2xl font-semibold text-[#8FA889] mt-1">{formatCurrency(channelTotals.bankDeposits)}</p>
           <p className="text-xs text-gray-400 mt-1">{channelTotals.bankDepositsCount} deposits · checks, transfers, other</p>
@@ -1119,23 +1095,35 @@ export default function NourishedPaymentInsightsPage() {
           </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-          <div>
+          <div
+            className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
+            onClick={() => setStatDrill({ title: "Pakistan Deployment — All", subtitle: "Wires + Xoom/Remitly + fees", txns: pakistanTxns, amountMode: "outflow" })}
+          >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Total Deployed</p>
             <p className="text-2xl font-semibold text-[#D97757]">{formatCurrency(totalDeployedToPakistan)}</p>
           </div>
-          <div>
+          <div
+            className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
+            onClick={() => setStatDrill({ title: "Wires (UBL)", subtitle: "UBL bank wires to Pakistan", txns: all.filter(tx => tx._cat === "pakistan_wire"), amountMode: "outflow" })}
+          >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Wires (UBL)</p>
             <p className="text-2xl font-semibold text-gray-800">
               {formatCurrency(sumAbs(all.filter(tx => tx._cat === "pakistan_wire")))}
             </p>
           </div>
-          <div>
+          <div
+            className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
+            onClick={() => setStatDrill({ title: "Xoom / Remitly", subtitle: "Remittance transfers to Pakistan", txns: all.filter(tx => tx._cat === "pakistan_xoom"), amountMode: "outflow" })}
+          >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Xoom / Remitly</p>
             <p className="text-2xl font-semibold text-gray-800">
               {formatCurrency(sumAbs(all.filter(tx => tx._cat === "pakistan_xoom")))}
             </p>
           </div>
-          <div>
+          <div
+            className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
+            onClick={() => setStatDrill({ title: "Wire Fees", subtitle: "Fees paid for wire transfers", txns: all.filter(tx => tx._cat === "wire_fee"), amountMode: "outflow" })}
+          >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Wire Fees</p>
             <p className="text-2xl font-semibold text-gray-800">{formatCurrency(wireFees)}</p>
           </div>
@@ -1169,23 +1157,38 @@ export default function NourishedPaymentInsightsPage() {
           </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
-          <div>
+          <div
+            className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
+            onClick={() => setStatDrill({ title: "Total US Operations", subtitle: `${usOpsRatio}% of total raised`, txns: usOpsTxns, amountMode: "outflow" })}
+          >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Total US Spend</p>
             <p className="text-2xl font-semibold text-[#6772E5]">{formatCurrency(totalUsOperations)}</p>
           </div>
-          <div>
+          <div
+            className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
+            onClick={() => setStatDrill({ title: "Zelle Out", subtitle: "Zelle transfers out", txns: all.filter(tx => tx._cat === "us_operations" && (tx.details ?? "").toUpperCase().includes("ZELLE")), amountMode: "outflow" })}
+          >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Zelle Out</p>
             <p className="text-2xl font-semibold text-gray-800">{formatCurrency(zelleOut)}</p>
           </div>
-          <div>
+          <div
+            className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
+            onClick={() => setStatDrill({ title: "Card Spend", subtitle: "Card purchases", txns: all.filter(tx => tx._cat === "us_operations" && (tx.details ?? "").toUpperCase().includes("PURCHASE")), amountMode: "outflow" })}
+          >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Card Spend</p>
             <p className="text-2xl font-semibold text-gray-800">{formatCurrency(cardSpend)}</p>
           </div>
-          <div>
+          <div
+            className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
+            onClick={() => setStatDrill({ title: "Withdrawals", subtitle: "Cash / ATM withdrawals", txns: all.filter(tx => tx._cat === "us_operations" && (tx.details ?? "").toUpperCase().includes("WITHDRAWAL")), amountMode: "outflow" })}
+          >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Withdrawals</p>
             <p className="text-2xl font-semibold text-gray-800">{formatCurrency(withdrawls)}</p>
           </div>
-          <div>
+          <div
+            className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
+            onClick={() => setStatDrill({ title: "Bank Fees", subtitle: "Bank-charged fees", txns: all.filter(tx => tx._cat === "bank_fee"), amountMode: "outflow" })}
+          >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Bank Fees</p>
             <p className="text-2xl font-semibold text-gray-800">{formatCurrency(bankFeesOut)}</p>
           </div>
@@ -1205,34 +1208,7 @@ export default function NourishedPaymentInsightsPage() {
       </div>
       )}
 
-      {/* Charts row 1 — Volume + (conditional) Credits vs Debits */}
-      <div className={`grid grid-cols-1 gap-6 ${showDebits ? "lg:grid-cols-2" : ""}`}>
-        <div className="bg-white rounded-lg p-4 shadow-sm h-72">
-          <h3 className="text-gray-700 font-medium mb-2">
-            Volume Over Time <span className="text-xs text-gray-400 font-normal">(last 30 days)</span>
-          </h3>
-          <div className="h-56">
-            {lineData.labels.length > 0 ? (
-              <Line data={lineData} options={chartOptions} />
-            ) : (
-              <div className="flex items-center justify-center h-full text-sm text-gray-400">
-                No transactions in the last 30 days
-              </div>
-            )}
-          </div>
-        </div>
-
-        {showDebits && (
-          <div className="bg-white rounded-lg p-4 shadow-sm h-72">
-            <h3 className="text-gray-700 font-medium mb-2">Credits vs Debits</h3>
-            <div className="h-56 flex items-center justify-center">
-              <Doughnut data={doughnutData} options={doughnutOptions} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Charts row 2 — MoM + YoY */}
+      {/* Charts row — MoM + YoY */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg p-4 shadow-sm h-80">
           <h3 className="text-gray-700 font-medium mb-2">Month-over-Month (Credits)</h3>
@@ -1720,6 +1696,144 @@ export default function NourishedPaymentInsightsPage() {
           onClose={() => setQoqDrill(null)}
         />
       )}
+
+      {statDrill && (
+        <StatDrillDialog
+          title={statDrill.title}
+          subtitle={statDrill.subtitle}
+          txns={statDrill.txns}
+          amountMode={statDrill.amountMode}
+          onClose={() => setStatDrill(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Generic stat-tile drill-down ───────────────────────────────────────────
+// Every clickable KPI/channel/ops tile opens this modal with the underlying
+// transaction list + CSV export. amountMode controls how values render:
+//  - credit: positive only, green styling
+//  - outflow: absolute value, red styling
+//  - signed: raw amount, sign decides color
+function StatDrillDialog({
+  title,
+  subtitle,
+  txns,
+  amountMode,
+  onClose,
+}: {
+  title: string
+  subtitle?: string
+  txns: Array<Transaction & { _cat: Category }>
+  amountMode: "credit" | "outflow" | "signed"
+  onClose: () => void
+}) {
+  const total = txns.reduce(
+    (s, tx) => s + (amountMode === "outflow" ? Math.abs(Number(tx.amount)) : Number(tx.amount)),
+    0,
+  )
+
+  function downloadCsv() {
+    const rows = [
+      ["Date", "Amount", "Details"].join(","),
+      ...txns
+        .slice()
+        .sort((a, b) => (a.date < b.date ? 1 : -1))
+        .map((tx) =>
+          [
+            String(tx.date).slice(0, 10),
+            Number(tx.amount).toFixed(2),
+            `"${(tx.details ?? "").replace(/"/g, '""')}"`,
+          ].join(","),
+        ),
+    ].join("\n")
+    const blob = new Blob([rows], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b flex items-start justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900">{title}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {subtitle ? `${subtitle} · ` : ""}
+              {txns.length} transaction{txns.length === 1 ? "" : "s"} · {formatCurrency(total)} total
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadCsv}
+              disabled={txns.length === 0}
+              className="text-xs px-3 py-1.5 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-700 text-xl leading-none px-2"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {txns.length === 0 ? (
+            <div className="p-10 text-center text-sm text-gray-400">
+              No transactions in this bucket.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 sticky top-0 text-xs uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th className="px-5 py-2.5 text-left font-semibold">Date</th>
+                  <th className="px-5 py-2.5 text-right font-semibold">Amount</th>
+                  <th className="px-5 py-2.5 text-left font-semibold">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {txns
+                  .slice()
+                  .sort((a, b) => (a.date < b.date ? 1 : -1))
+                  .map((tx) => {
+                    const amt = Number(tx.amount)
+                    const displayAmt = amountMode === "outflow" ? Math.abs(amt) : amt
+                    const colorClass =
+                      amountMode === "outflow" || amt < 0
+                        ? "text-red-500"
+                        : "text-[#4F8A70]"
+                    return (
+                      <tr key={tx.id} className="hover:bg-gray-50">
+                        <td className="px-5 py-2 text-gray-600 tabular-nums whitespace-nowrap">
+                          {String(tx.date).slice(0, 10)}
+                        </td>
+                        <td className={`px-5 py-2 text-right font-semibold tabular-nums whitespace-nowrap ${colorClass}`}>
+                          {amountMode === "outflow" ? "-" : amt >= 0 ? "+" : "-"}
+                          {formatCurrency(Math.abs(displayAmt))}
+                        </td>
+                        <td className="px-5 py-2 text-gray-700">
+                          <span className="block truncate max-w-xl" title={tx.details ?? ""}>
+                            {tx.details ?? "—"}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
