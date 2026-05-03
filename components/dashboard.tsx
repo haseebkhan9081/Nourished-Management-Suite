@@ -13,6 +13,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { DropdownMobileNav } from "./DropdownMobileNav"
 import { UserManagementSection } from "./users-management-section"
 import { DevicesSection } from "./devices-section"
+import { HolidaysCalendarSection } from "./holidays-calendar-section"
 
 export function Dashboard() {
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null)
@@ -57,7 +58,7 @@ export function Dashboard() {
         <TabsList
           className="hidden sm:flex flex-row gap-2 w-full overflow-x-auto whitespace-nowrap
             scrollbar-thin scrollbar-thumb-[#A2BD9D]/40 scrollbar-track-transparent
-            px-1 py-2 sm:grid sm:grid-cols-7 sm:gap-0 sm:px-0 sm:py-0 h-auto
+            px-1 py-2 sm:grid sm:grid-cols-8 sm:gap-0 sm:px-0 sm:py-0 h-auto
             touch-auto"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
@@ -81,6 +82,9 @@ export function Dashboard() {
           </TabsTrigger>
           <TabsTrigger value="devices" className="flex-shrink-0 min-w-[90px] data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white text-xs sm:text-sm px-3 py-2 sm:p-3 rounded-md sm:rounded-none">
             Devices
+          </TabsTrigger>
+          <TabsTrigger value="calendar" className="flex-shrink-0 min-w-[90px] data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white text-xs sm:text-sm px-3 py-2 sm:p-3 rounded-md sm:rounded-none">
+            Calendar
           </TabsTrigger>
         </TabsList>
 
@@ -107,6 +111,9 @@ export function Dashboard() {
         </TabsContent>
         <TabsContent value="devices">
           <DevicesSection selectedSchoolId={selectedSchoolId} />
+        </TabsContent>
+        <TabsContent value="calendar">
+          <HolidaysCalendarSection selectedSchoolId={selectedSchoolId} />
         </TabsContent>
       </Tabs>
     </div>
