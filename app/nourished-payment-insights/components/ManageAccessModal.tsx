@@ -165,8 +165,8 @@ const removeUser = async (email: string) => {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-gray-50">
-        <DialogHeader>
+      <DialogContent className="max-w-full sm:max-w-2xl bg-gray-50 max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="pb-4">
           <DialogTitle className="text-lg font-semibold text-gray-900">
             Manage Access
           </DialogTitle>
@@ -180,7 +180,7 @@ const removeUser = async (email: string) => {
             <Loader2 className="h-7 w-7 animate-spin text-[#A2BD9D]" />
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 pr-4">
             {/* Existing users */}
             {users.map(user => {
               const isSelf = user.email === currentUserEmail
@@ -189,11 +189,11 @@ const removeUser = async (email: string) => {
               return (
                 <div
                   key={user.email}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-lg bg-white px-4 py-3 border shadow-sm"
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 rounded-lg bg-white px-3 sm:px-4 py-3 border shadow-sm"
                 >
                   {/* User info */}
                   <div className="flex items-center gap-3 min-w-0">
-                    <Avatar className="h-9 w-9">
+                    <Avatar className="h-8 sm:h-9 w-8 sm:w-9 shrink-0">
                       <AvatarImage src={user.image_url || undefined} />
                       <AvatarFallback>
                         {getInitials(user.name, user.email)}
@@ -201,7 +201,7 @@ const removeUser = async (email: string) => {
                     </Avatar>
 
                     <div className="min-w-0">
-                      <p className="font-medium text-gray-900 truncate">
+                      <p className="font-medium text-gray-900 truncate text-sm">
                         {user.name || user.email}
                         {isSelf && (
                           <span className="ml-2 text-xs text-gray-500">
@@ -216,7 +216,7 @@ const removeUser = async (email: string) => {
                   </div>
 
                   {/* Controls */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <Select
                       value={user.role}
                       disabled={isSelfAdmin}
@@ -224,7 +224,7 @@ const removeUser = async (email: string) => {
                         updateRole(user.email, value)
                       }
                     >
-                      <SelectTrigger className="w-32 h-9">
+                      <SelectTrigger className="w-28 sm:w-32 h-8 sm:h-9">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -242,7 +242,7 @@ const removeUser = async (email: string) => {
                       variant="ghost"
                       size="icon"
                       disabled={isSelfAdmin}
-                      className="text-red-500 hover:bg-red-50 disabled:opacity-40"
+                      className="text-red-500 hover:bg-red-50 disabled:opacity-40 h-8 w-8 sm:h-9 sm:w-9"
                      onClick={() => removeUser(user.email)}
                     >
                       <Trash2 size={16} />
@@ -254,12 +254,12 @@ const removeUser = async (email: string) => {
 
             {/* Add user row */}
             {adding && (
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-lg bg-white px-4 py-3 border border-dashed">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 rounded-lg bg-white px-3 sm:px-4 py-3 border border-dashed">
                 <Select
                   value={newUserEmail ?? ""}
                   onValueChange={setNewUserEmail}
                 >
-                  <SelectTrigger className="w-full sm:w-64 h-9">
+                  <SelectTrigger className="w-full sm:w-64 h-8 sm:h-9">
                     <SelectValue placeholder="Select user" />
                   </SelectTrigger>
                   <SelectContent>
@@ -268,7 +268,7 @@ const removeUser = async (email: string) => {
                       .map(user => (
                         <SelectItem key={user.email} value={user.email}>
                             <div className="flex items-center gap-3 min-w-0">
-                    <Avatar className="h-9 w-9">
+                    <Avatar className="h-8 sm:h-9 w-8 sm:w-9">
                       <AvatarImage src={user.image_url || undefined} />
                       <AvatarFallback>
                         {getInitials(user.name, user.email)}
@@ -291,7 +291,7 @@ const removeUser = async (email: string) => {
                 </Select>
 
                 <Select value={newRole} onValueChange={(value:string) => setNewRole(value as Role)}>
-                  <SelectTrigger className="w-32 h-9">
+                  <SelectTrigger className="w-28 sm:w-32 h-8 sm:h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -301,12 +301,12 @@ const removeUser = async (email: string) => {
                   </SelectContent>
                 </Select>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <Button
                     size="sm"
                     disabled={!newUserEmail || addingLoading}
                     onClick={addUser}
-                    className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white"
+                    className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-8"
                   >
                     {addingLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -323,6 +323,7 @@ const removeUser = async (email: string) => {
                       setNewUserEmail(null)
                       setNewRole("viewer")
                     }}
+                    className="h-8"
                   >
                     Cancel
                   </Button>

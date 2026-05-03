@@ -220,17 +220,17 @@ export function UploadTransactionModal({ open, onClose }: Props) {
   const renderPreview = () => (
     <div className="space-y-4">
       {/* File pill */}
-      <div className="flex items-center justify-between bg-white border rounded-lg px-4 py-2.5 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 bg-white border rounded-lg px-3 sm:px-4 py-2.5 shadow-sm">
         <div className="flex items-center gap-2 min-w-0">
           <FileSpreadsheet size={18} className="text-[#A2BD9D] shrink-0" />
-          <span className="text-sm font-medium text-gray-700 truncate">{fileName}</span>
+          <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{fileName}</span>
           <span className="text-xs text-gray-400 shrink-0">
             — {rows.length} row{rows.length !== 1 ? "s" : ""} parsed
           </span>
         </div>
         <button
           onClick={handleReset}
-          className="text-gray-400 hover:text-red-500 transition-colors ml-3 shrink-0"
+          className="text-gray-400 hover:text-red-500 transition-colors self-end sm:self-auto ml-auto sm:ml-3 shrink-0"
           title="Remove file"
         >
           <X size={16} />
@@ -239,7 +239,7 @@ export function UploadTransactionModal({ open, onClose }: Props) {
 
       {/* JSON preview */}
       <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
-        <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 sm:px-4 py-2 bg-gray-50 border-b">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
             Parsed JSON Preview
           </span>
@@ -247,10 +247,10 @@ export function UploadTransactionModal({ open, onClose }: Props) {
             {rows.length > 10 ? `Showing first 10 of ${rows.length}` : `${rows.length} rows`}
           </span>
         </div>
-        <div className="overflow-y-auto max-h-72 p-4">
+        <div className="overflow-y-auto max-h-72 p-3 sm:p-4">
           <pre className="text-xs text-gray-700 font-mono leading-relaxed whitespace-pre-wrap break-words">
             {JSON.stringify(rows.slice(0, 10), null, 2)}
-            
+
           </pre>
         </div>
         {rows.length > 10 && (
@@ -331,11 +331,11 @@ export function UploadTransactionModal({ open, onClose }: Props) {
 
   const renderFooter = () => {
     if (status === "preview") return (
-      <div className="flex justify-end gap-2 pt-3 border-t mt-1">
-        <Button variant="ghost" onClick={handleReset}>Change file</Button>
+      <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-3 border-t mt-1">
+        <Button variant="ghost" onClick={handleReset} className="w-full sm:w-auto order-2 sm:order-none">Change file</Button>
         <Button
           onClick={handleUpload}
-          className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white flex items-center gap-2"
+          className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white flex items-center gap-2 w-full sm:w-auto order-1 sm:order-none justify-center"
         >
           <Upload size={16} />
           Upload to Database
@@ -343,8 +343,8 @@ export function UploadTransactionModal({ open, onClose }: Props) {
       </div>
     )
     if (status === "success") return (
-      <div className="flex justify-end pt-3 border-t mt-1">
-        <Button onClick={handleClose} className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white">
+      <div className="flex justify-center sm:justify-end pt-3 border-t mt-1">
+        <Button onClick={handleClose} className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white w-full sm:w-auto">
           Done
         </Button>
       </div>
@@ -357,8 +357,8 @@ export function UploadTransactionModal({ open, onClose }: Props) {
   // ---------------------------------------------------------------------------
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl bg-gray-50">
-        <DialogHeader>
+      <DialogContent className="max-w-full sm:max-w-3xl bg-gray-50 max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="pb-4">
           <DialogTitle className="text-lg font-semibold text-gray-900">
             Add Transaction Data
           </DialogTitle>
@@ -367,7 +367,7 @@ export function UploadTransactionModal({ open, onClose }: Props) {
           </p>
         </DialogHeader>
 
-        <div className="mt-2">
+        <div className="mt-2 pr-4">
           {(status === "idle" || status === "error") && (
             <DataFreshnessBanner source="bank" open={open} />
           )}

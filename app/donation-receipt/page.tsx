@@ -1114,7 +1114,7 @@ function DonorDetailPanel({
 
         {/* Combined send bar */}
         {selectedIds.size >= 2 && (
-          <div className="mt-3 flex items-center justify-between gap-3 p-3 bg-[#f0f6ef] border border-[#A2BD9D] rounded-md">
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 p-3 bg-[#f0f6ef] border border-[#A2BD9D] rounded-md">
             <div className="text-sm text-[#3d6b38]">
               <span className="font-semibold">{selectedIds.size} selected</span>
               <span className="text-gray-500">
@@ -1126,7 +1126,7 @@ function DonorDetailPanel({
               onClick={startCombined}
               disabled={!hasValidEmail}
               title={!hasValidEmail ? "Add an email to this donor first" : undefined}
-              className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-8 px-4 text-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-8 px-4 text-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               <Send size={13} className="mr-1.5" />
               Send combined receipt
@@ -1140,7 +1140,7 @@ function DonorDetailPanel({
         <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-3 flex items-center gap-1.5">
           <CalendarCheck size={12} /> Year-End Receipt
         </p>
-        <div className="flex items-end gap-3 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3">
           <div className="flex-1 min-w-[140px]">
             <Label htmlFor="yePick" className="text-xs text-gray-600 mb-1 block">
               Tax year
@@ -1177,7 +1177,7 @@ function DonorDetailPanel({
             onClick={startYearEnd}
             disabled={!hasValidEmail}
             title={!hasValidEmail ? "Add an email to this donor first" : undefined}
-            className="bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-9 px-4 text-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="w-full sm:w-auto bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-9 px-4 text-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             <CalendarCheck size={14} className="mr-1.5" />
             Send year-end receipt
@@ -2756,34 +2756,38 @@ export default function DonationReceiptsPage() {
       </div>
 
       <Tabs defaultValue="search" className="w-full">
-        <TabsList className="mb-6 bg-gray-100 rounded-lg p-1 w-full max-w-3xl">
+        <TabsList className="mb-8 sm:mb-6 h-auto bg-gray-100 rounded-lg p-1 w-full max-w-none grid grid-cols-2 sm:grid-cols-4 gap-1">
           <TabsTrigger
             value="search"
-            className="flex-1 text-sm font-medium rounded-md data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all"
+            className="text-xs sm:text-sm font-medium rounded-md px-1 sm:px-3 py-2 sm:py-2.5 data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all flex items-center justify-center gap-1 sm:gap-1.5"
           >
-            <Search size={13} className="mr-1.5" />
-            Donor Search
+            <Search size={13} className="shrink-0" />
+            <span className="hidden sm:inline">Donor Search</span>
+            <span className="sm:hidden">Donor</span>
           </TabsTrigger>
           <TabsTrigger
             value="bank"
-            className="flex-1 text-sm font-medium rounded-md data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all"
+            className="text-xs sm:text-sm font-medium rounded-md px-1 sm:px-3 py-2 sm:py-2.5 data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all flex items-center justify-center gap-1 sm:gap-1.5"
           >
-            <Download size={13} className="mr-1.5 rotate-180" />
-            Bank Transfers
+            <Download size={13} className="shrink-0 rotate-180" />
+            <span className="hidden sm:inline">Bank Transfers</span>
+            <span className="sm:hidden">Bank</span>
           </TabsTrigger>
           <TabsTrigger
             value="incomplete"
-            className="flex-1 text-sm font-medium rounded-md data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all"
+            className="text-xs sm:text-sm font-medium rounded-md px-1 sm:px-3 py-2 sm:py-2.5 data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all flex items-center justify-center gap-1 sm:gap-1.5"
           >
-            <AlertTriangle size={13} className="mr-1.5" />
-            Incomplete
+            <AlertTriangle size={13} className="shrink-0" />
+            <span className="hidden sm:inline">Incomplete</span>
+            <span className="sm:hidden">Missing</span>
           </TabsTrigger>
           <TabsTrigger
             value="manual"
-            className="flex-1 text-sm font-medium rounded-md data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all"
+            className="text-xs sm:text-sm font-medium rounded-md px-1 sm:px-3 py-2 sm:py-2.5 data-[state=active]:bg-[#A2BD9D] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all flex items-center justify-center gap-1 sm:gap-1.5"
           >
-            <Plus size={13} className="mr-1.5" />
-            New Donation
+            <Plus size={13} className="shrink-0" />
+            <span className="hidden sm:inline">New Donation</span>
+            <span className="sm:hidden">New</span>
           </TabsTrigger>
         </TabsList>
 

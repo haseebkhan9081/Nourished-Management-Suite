@@ -762,6 +762,15 @@ export default function NourishedPaymentInsightsPage() {
     afterDatasetsDraw(chart: any) {
       const { ctx } = chart
       const isHorizontal = chart.options?.indexAxis === "y"
+      const chartWidth = chart.width
+      const dataCount = chart.data.datasets[0]?.data?.length || 1
+
+      // Calculate responsive font size based on chart width and data density
+      let fontSize = 11
+      if (chartWidth < 400) fontSize = 7  // very small mobile
+      else if (chartWidth < 500) fontSize = 8  // small mobile
+      else if (chartWidth < 700) fontSize = 9  // tablet
+
       chart.data.datasets.forEach((dataset: any, i: number) => {
         const meta = chart.getDatasetMeta(i)
         meta.data.forEach((bar: any, index: number) => {
@@ -769,7 +778,7 @@ export default function NourishedPaymentInsightsPage() {
           if (value == null) return
           const label = abbreviateCurrency(Number(value))
           ctx.save()
-          ctx.font = "600 11px system-ui, -apple-system, sans-serif"
+          ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`
 
           if (isHorizontal) {
             const barWidth = Math.abs(bar.x - bar.base)
@@ -810,7 +819,7 @@ export default function NourishedPaymentInsightsPage() {
 
   // ── Chart options ───────────────────────────────────────────────────────────
   const chartOptions = {
-    layout: { padding: { top: 30, right: 12, bottom: 0, left: 0 } },
+    layout: { padding: { top: 30, right: 12, bottom: 40, left: 0 } },
     plugins: {
       legend: {
         position: "bottom" as const,
@@ -839,8 +848,15 @@ export default function NourishedPaymentInsightsPage() {
       },
     },
     scales: {
-      x: { ticks: { color: "#6B7280" }, grid: { color: "#E5E7EB" } },
-      y: { ticks: { color: "#6B7280" }, grid: { color: "#E5E7EB" } },
+      x: {
+        ticks: { color: "#6B7280", maxRotation: 90, minRotation: 90 },
+        grid: { color: "#E5E7EB" }
+      },
+      y: {
+        ticks: { color: "#6B7280", display: false },
+        grid: { color: "#E5E7EB", display: false },
+        beginAtZero: true,
+      },
     },
     responsive: true,
     maintainAspectRatio: false,
@@ -962,7 +978,7 @@ export default function NourishedPaymentInsightsPage() {
           onClick={() => setStatDrill({ title: "Current Balance", subtitle: "All transactions", txns: all, amountMode: "signed" })}
         >
           <p className="text-sm text-gray-500">Current Balance</p>
-          <p className={`text-2xl font-semibold ${currentBalance < 0 ? "text-red-500" : "text-gray-900"}`}>
+          <p className={`text-lg sm:text-xl md:text-2xl font-semibold ${currentBalance < 0 ? "text-red-500" : "text-gray-900"}`}>
             {formatCurrency(currentBalance)}
           </p>
         </div>
@@ -972,7 +988,7 @@ export default function NourishedPaymentInsightsPage() {
           onClick={() => setStatDrill({ title: "Total Raised", subtitle: "All incoming credits", txns: credits, amountMode: "credit" })}
         >
           <p className="text-sm text-gray-500">Total Raised</p>
-          <p className="text-2xl font-semibold text-[#A2BD9D]">{formatCurrency(totalCredits)}</p>
+          <p className="text-lg sm:text-xl md:text-2xl font-semibold text-[#A2BD9D]">{formatCurrency(totalCredits)}</p>
           <div className="flex items-center gap-2 mt-1">
             <p className="text-xs text-gray-400">{credits.length} donations</p>
             <span
@@ -998,7 +1014,7 @@ export default function NourishedPaymentInsightsPage() {
             onClick={() => setStatDrill({ title: "Total Outflow", subtitle: "All outgoing payments", txns: debits, amountMode: "outflow" })}
           >
             <p className="text-sm text-gray-500">Total Outflow</p>
-            <p className="text-2xl font-semibold text-red-400">{formatCurrency(totalDebits)}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-red-400">{formatCurrency(totalDebits)}</p>
             <div className="flex items-center gap-2 mt-1">
               <p className="text-xs text-gray-400">{debits.length} payments</p>
               <span className="text-xs text-gray-400">
@@ -1021,7 +1037,7 @@ export default function NourishedPaymentInsightsPage() {
           onClick={() => setStatDrill({ title: "All Transactions", subtitle: source === "all" ? "Full dataset" : `${source} filter`, txns: filtered, amountMode: "signed" })}
         >
           <p className="text-sm text-gray-500">Transactions</p>
-          <p className="text-2xl font-semibold">{totalCount.toLocaleString()}</p>
+          <p className="text-lg sm:text-xl md:text-2xl font-semibold">{totalCount.toLocaleString()}</p>
         </div>
 
         {source !== "stripe" && (
@@ -1030,7 +1046,7 @@ export default function NourishedPaymentInsightsPage() {
             onClick={() => setStatDrill({ title: "Pakistan Deployment", subtitle: `${deploymentRatio}% of total raised`, txns: pakistanTxns, amountMode: "outflow" })}
           >
             <p className="text-sm text-gray-500">Deployment Ratio</p>
-            <p className="text-2xl font-semibold text-[#D97757]">{deploymentRatio}%</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-[#D97757]">{deploymentRatio}%</p>
             <p className="text-xs text-gray-400 mt-1">of total raised to Pakistan</p>
           </div>
         )}
@@ -1041,7 +1057,7 @@ export default function NourishedPaymentInsightsPage() {
             onClick={() => setStatDrill({ title: "Cash Runway — Outflows (last 3 months)", subtitle: `${formatCurrency(cashRunway.avgMonthlyBurn)}/mo avg burn`, txns: all.filter(tx => tx.amount < 0 && new Date(tx.date).getTime() >= new Date(new Date().getFullYear(), new Date().getMonth() - 3, 1).getTime()), amountMode: "outflow" })}
           >
             <p className="text-sm text-gray-500">Cash Runway</p>
-            <p className={`text-2xl font-semibold ${
+            <p className={`text-lg sm:text-xl md:text-2xl font-semibold ${
               cashRunway.months === null
                 ? "text-gray-400"
                 : cashRunway.months < 3 ? "text-red-500"
@@ -1064,7 +1080,7 @@ export default function NourishedPaymentInsightsPage() {
           onClick={() => setStatDrill({ title: "Stripe Deposits", subtitle: "Online donations", txns: all.filter(tx => tx.amount > 0 && channelOf(tx._cat, tx.amount) === "stripe"), amountMode: "credit" })}
         >
           <p className="text-xs text-gray-500 uppercase tracking-wide">Stripe</p>
-          <p className="text-2xl font-semibold text-[#6772E5] mt-1">{formatCurrency(channelTotals.stripe)}</p>
+          <p className="text-lg sm:text-xl md:text-2xl font-semibold text-[#6772E5] mt-1">{formatCurrency(channelTotals.stripe)}</p>
           <p className="text-xs text-gray-400 mt-1">{channelTotals.stripeCount} deposits · online donations</p>
         </div>
         <div
@@ -1072,7 +1088,7 @@ export default function NourishedPaymentInsightsPage() {
           onClick={() => setStatDrill({ title: "Benevity / Corporate", subtitle: "AOG + CyberGrants disbursements", txns: all.filter(tx => tx.amount > 0 && channelOf(tx._cat, tx.amount) === "benevity"), amountMode: "credit" })}
         >
           <p className="text-xs text-gray-500 uppercase tracking-wide">Benevity / Corporate</p>
-          <p className="text-2xl font-semibold text-[#4F8A70] mt-1">{formatCurrency(channelTotals.benevity)}</p>
+          <p className="text-lg sm:text-xl md:text-2xl font-semibold text-[#4F8A70] mt-1">{formatCurrency(channelTotals.benevity)}</p>
           <p className="text-xs text-gray-400 mt-1">{channelTotals.benevityCount} disbursements · AOG + CyberGrants</p>
         </div>
         <div
@@ -1080,7 +1096,7 @@ export default function NourishedPaymentInsightsPage() {
           onClick={() => setStatDrill({ title: "Direct Bank Deposits", subtitle: "Checks, transfers, other", txns: all.filter(tx => tx.amount > 0 && channelOf(tx._cat, tx.amount) === "bank_deposits"), amountMode: "credit" })}
         >
           <p className="text-xs text-gray-500 uppercase tracking-wide">Direct Bank Deposits</p>
-          <p className="text-2xl font-semibold text-[#8FA889] mt-1">{formatCurrency(channelTotals.bankDeposits)}</p>
+          <p className="text-lg sm:text-xl md:text-2xl font-semibold text-[#8FA889] mt-1">{formatCurrency(channelTotals.bankDeposits)}</p>
           <p className="text-xs text-gray-400 mt-1">{channelTotals.bankDepositsCount} deposits · checks, transfers, other</p>
         </div>
       </div>
@@ -1100,14 +1116,14 @@ export default function NourishedPaymentInsightsPage() {
             onClick={() => setStatDrill({ title: "Pakistan Deployment — All", subtitle: "Wires + Xoom/Remitly + fees", txns: pakistanTxns, amountMode: "outflow" })}
           >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Total Deployed</p>
-            <p className="text-2xl font-semibold text-[#D97757]">{formatCurrency(totalDeployedToPakistan)}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-[#D97757]">{formatCurrency(totalDeployedToPakistan)}</p>
           </div>
           <div
             className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
             onClick={() => setStatDrill({ title: "Wires (UBL)", subtitle: "UBL bank wires to Pakistan", txns: all.filter(tx => tx._cat === "pakistan_wire"), amountMode: "outflow" })}
           >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Wires (UBL)</p>
-            <p className="text-2xl font-semibold text-gray-800">
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
               {formatCurrency(sumAbs(all.filter(tx => tx._cat === "pakistan_wire")))}
             </p>
           </div>
@@ -1116,7 +1132,7 @@ export default function NourishedPaymentInsightsPage() {
             onClick={() => setStatDrill({ title: "Xoom / Remitly", subtitle: "Remittance transfers to Pakistan", txns: all.filter(tx => tx._cat === "pakistan_xoom"), amountMode: "outflow" })}
           >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Xoom / Remitly</p>
-            <p className="text-2xl font-semibold text-gray-800">
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
               {formatCurrency(sumAbs(all.filter(tx => tx._cat === "pakistan_xoom")))}
             </p>
           </div>
@@ -1125,7 +1141,7 @@ export default function NourishedPaymentInsightsPage() {
             onClick={() => setStatDrill({ title: "Wire Fees", subtitle: "Fees paid for wire transfers", txns: all.filter(tx => tx._cat === "wire_fee"), amountMode: "outflow" })}
           >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Wire Fees</p>
-            <p className="text-2xl font-semibold text-gray-800">{formatCurrency(wireFees)}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">{formatCurrency(wireFees)}</p>
           </div>
         </div>
         <div className="bg-white rounded-lg p-3 border border-gray-100 h-64">
@@ -1162,35 +1178,35 @@ export default function NourishedPaymentInsightsPage() {
             onClick={() => setStatDrill({ title: "Total US Operations", subtitle: `${usOpsRatio}% of total raised`, txns: usOpsTxns, amountMode: "outflow" })}
           >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Total US Spend</p>
-            <p className="text-2xl font-semibold text-[#6772E5]">{formatCurrency(totalUsOperations)}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-[#6772E5]">{formatCurrency(totalUsOperations)}</p>
           </div>
           <div
             className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
             onClick={() => setStatDrill({ title: "Zelle Out", subtitle: "Zelle transfers out", txns: all.filter(tx => tx._cat === "us_operations" && (tx.details ?? "").toUpperCase().includes("ZELLE")), amountMode: "outflow" })}
           >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Zelle Out</p>
-            <p className="text-2xl font-semibold text-gray-800">{formatCurrency(zelleOut)}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">{formatCurrency(zelleOut)}</p>
           </div>
           <div
             className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
             onClick={() => setStatDrill({ title: "Card Spend", subtitle: "Card purchases", txns: all.filter(tx => tx._cat === "us_operations" && (tx.details ?? "").toUpperCase().includes("PURCHASE")), amountMode: "outflow" })}
           >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Card Spend</p>
-            <p className="text-2xl font-semibold text-gray-800">{formatCurrency(cardSpend)}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">{formatCurrency(cardSpend)}</p>
           </div>
           <div
             className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
             onClick={() => setStatDrill({ title: "Withdrawals", subtitle: "Cash / ATM withdrawals", txns: all.filter(tx => tx._cat === "us_operations" && (tx.details ?? "").toUpperCase().includes("WITHDRAWAL")), amountMode: "outflow" })}
           >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Withdrawals</p>
-            <p className="text-2xl font-semibold text-gray-800">{formatCurrency(withdrawls)}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">{formatCurrency(withdrawls)}</p>
           </div>
           <div
             className="cursor-pointer rounded-md p-2 -m-2 hover:bg-white/60 transition"
             onClick={() => setStatDrill({ title: "Bank Fees", subtitle: "Bank-charged fees", txns: all.filter(tx => tx._cat === "bank_fee"), amountMode: "outflow" })}
           >
             <p className="text-xs text-gray-500 uppercase tracking-wide">Bank Fees</p>
-            <p className="text-2xl font-semibold text-gray-800">{formatCurrency(bankFeesOut)}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">{formatCurrency(bankFeesOut)}</p>
           </div>
         </div>
         <div className="bg-white rounded-lg p-3 border border-gray-100 h-64">
@@ -1262,38 +1278,38 @@ export default function NourishedPaymentInsightsPage() {
           </div>
 
           {/* KPI strip */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 border-b bg-gray-50/70">
-            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-              <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 p-3 sm:p-6 border-b bg-gray-50/70">
+            <div className="bg-white rounded-lg border border-gray-200 p-2 sm:p-4 shadow-sm">
+              <p className="text-[8px] sm:text-[9px] md:text-[10px] uppercase tracking-wider text-gray-500 font-semibold truncate">
                 {qoqKpis.currentLabel} (current)
               </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1.5">{formatCurrency(qoqKpis.current)}</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mt-1 sm:mt-1.5">{formatCurrency(qoqKpis.current)}</p>
               {qoqKpis.qoqPct !== null && (
-                <p className={`text-xs mt-1 font-medium ${qoqKpis.qoqPct >= 0 ? "text-green-600" : "text-red-500"}`}>
+                <p className={`text-[10px] sm:text-xs mt-1 font-medium ${qoqKpis.qoqPct >= 0 ? "text-green-600" : "text-red-500"}`}>
                   {qoqKpis.qoqPct >= 0 ? "▲" : "▼"} {Math.abs(qoqKpis.qoqPct).toFixed(0)}% vs {qoqKpis.priorLabel}
                 </p>
               )}
             </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-              <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">
+            <div className="bg-white rounded-lg border border-gray-200 p-2 sm:p-4 shadow-sm">
+              <p className="text-[8px] sm:text-[9px] md:text-[10px] uppercase tracking-wider text-gray-500 font-semibold truncate">
                 {qoqKpis.priorLabel} (prior)
               </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1.5">{formatCurrency(qoqKpis.prior)}</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mt-1 sm:mt-1.5">{formatCurrency(qoqKpis.prior)}</p>
               {qoqKpis.yoyPct !== null && (
-                <p className={`text-xs mt-1 font-medium ${qoqKpis.yoyPct >= 0 ? "text-green-600" : "text-red-500"}`}>
+                <p className={`text-[10px] sm:text-xs mt-1 font-medium ${qoqKpis.yoyPct >= 0 ? "text-green-600" : "text-red-500"}`}>
                   YoY: {qoqKpis.yoyPct >= 0 ? "▲" : "▼"} {Math.abs(qoqKpis.yoyPct).toFixed(0)}%
                 </p>
               )}
             </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-              <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Trailing 4 quarters</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1.5">{formatCurrency(qoqKpis.trailing4)}</p>
-              <p className="text-xs text-gray-500 mt-1">rolling TTM</p>
+            <div className="bg-white rounded-lg border border-gray-200 p-2 sm:p-4 shadow-sm">
+              <p className="text-[8px] sm:text-[9px] md:text-[10px] uppercase tracking-wider text-gray-500 font-semibold truncate">Trailing 4 quarters</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mt-1 sm:mt-1.5">{formatCurrency(qoqKpis.trailing4)}</p>
+              <p className="text-[9px] sm:text-xs text-gray-500 mt-1">rolling TTM</p>
             </div>
-            <div className="bg-white rounded-lg border border-[#4F8A70]/30 p-4 shadow-sm bg-gradient-to-br from-white to-[#F3F8F0]">
-              <p className="text-[10px] uppercase tracking-wider text-[#4F8A70] font-semibold">Best quarter</p>
-              <p className="text-2xl font-bold text-[#4F8A70] mt-1.5">{formatCurrency(qoqKpis.best)}</p>
-              <p className="text-xs text-gray-500 mt-1">{formatQuarterLabel(qoqKpis.bestQ)}</p>
+            <div className="bg-white rounded-lg border border-[#4F8A70]/30 p-2 sm:p-4 shadow-sm bg-gradient-to-br from-white to-[#F3F8F0]">
+              <p className="text-[8px] sm:text-[9px] md:text-[10px] uppercase tracking-wider text-[#4F8A70] font-semibold truncate">Best quarter</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-bold text-[#4F8A70] mt-1 sm:mt-1.5">{formatCurrency(qoqKpis.best)}</p>
+              <p className="text-[9px] sm:text-xs text-gray-500 mt-1">{formatQuarterLabel(qoqKpis.bestQ)}</p>
             </div>
           </div>
 

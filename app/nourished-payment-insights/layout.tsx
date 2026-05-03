@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { signOut, useSession } from "next-auth/react"
 import { fetchUserPermissions } from "@/lib/fetchPermissions"
-import { Loader2, UserPlus, UserPlus2 } from "lucide-react"
+import { Loader2, UserPlus, UserPlus2, Menu, X } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { User, Settings, LogOut,DatabaseZap, Heart } from "lucide-react"
@@ -20,6 +20,7 @@ export default function PaymentInsightsLayout({ children }: PaymentInsightsLayou
     const [open, setOpen] = useState(false)
     const [uploadOpen, setUploadOpen] = useState(false)
     const [benevityOpen, setBenevityOpen] = useState(false)
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { data: session, status } = useSession()
   const [permissions, setPermissions] = useState<string[] | null>(null)
 
@@ -75,67 +76,138 @@ export default function PaymentInsightsLayout({ children }: PaymentInsightsLayou
               <ModuleSwitcher fallbackLabel="Payment Insights" />
             </div>
 
-            {/* Right: Welcome Text, Manage Access, Sign Out */}
-<div className="flex items-center gap-2 sm:gap-3">
-  {/* Welcome text (desktop only) */}
-  <span className="hidden md:block text-sm text-gray-600 truncate max-w-xs">
-    Welcome, {session?.user?.name || session?.user?.email}
-  </span>
+            {/* Right: Desktop menu (hidden on mobile) + Mobile menu icon */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* Desktop buttons (visible on sm and up) */}
+              <div className="hidden sm:flex items-center gap-2 sm:gap-3">
+                {/* Welcome text (md and up) */}
+                <span className="hidden md:block text-sm text-gray-600 truncate max-w-xs">
+                  Welcome, {session?.user?.name || session?.user?.email}
+                </span>
 
-  {/* Manage Access (admin only) */}
-  {permissions.includes("payment_insights:manage_users") && (
-     <>
-    <Button
-      size="sm"
-      className="flex items-center gap-1.5 bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-9 px-3"
-       onClick={() => setOpen(true)}
-    >
-      <UserPlus2 size={16} />
-      <span className="hidden sm:inline">Manage Access</span>
-    </Button>
-     <ManageAccessModal open={open} onClose={() => setOpen(false)} />
-     </>
-  )}
+                {/* Manage Access (admin only) */}
+                {permissions.includes("payment_insights:manage_users") && (
+                  <>
+                    <Button
+                      size="sm"
+                      className="flex items-center gap-1.5 bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-9 px-3"
+                      onClick={() => setOpen(true)}
+                    >
+                      <UserPlus2 size={16} />
+                      <span className="hidden sm:inline">Manage Access</span>
+                    </Button>
+                    <ManageAccessModal open={open} onClose={() => setOpen(false)} />
+                  </>
+                )}
 
-  {permissions.includes("payment_insights:manage_users") && (
-  <>
-    <Button
-      size="sm"
-      className="flex items-center gap-1.5 bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-9 px-3"
-      onClick={() => setUploadOpen(true)}
-    >
-      <DatabaseZap size={16} />
-      <span className="hidden sm:inline">Add Transaction Data</span>
-    </Button>
-    {/* Upload Transaction Modal */}
-    <UploadTransactionModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+                {permissions.includes("payment_insights:manage_users") && (
+                  <>
+                    <Button
+                      size="sm"
+                      className="flex items-center gap-1.5 bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-9 px-3"
+                      onClick={() => setUploadOpen(true)}
+                    >
+                      <DatabaseZap size={16} />
+                      <span className="hidden sm:inline">Add Transaction Data</span>
+                    </Button>
+                    <UploadTransactionModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
 
-    <Button
-      size="sm"
-      variant="outline"
-      className="flex items-center gap-1.5 h-9 px-3 border-[#A2BD9D] text-[#5a7a55] hover:bg-[#A2BD9D]/10"
-      onClick={() => setBenevityOpen(true)}
-    >
-      <Heart size={16} />
-      <span className="hidden sm:inline">Upload Corporate</span>
-    </Button>
-    <UploadBenevityModal open={benevityOpen} onClose={() => setBenevityOpen(false)} />
-  </>
-)}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex items-center gap-1.5 h-9 px-3 border-[#A2BD9D] text-[#5a7a55] hover:bg-[#A2BD9D]/10"
+                      onClick={() => setBenevityOpen(true)}
+                    >
+                      <Heart size={16} />
+                      <span className="hidden sm:inline">Upload Corporate</span>
+                    </Button>
+                    <UploadBenevityModal open={benevityOpen} onClose={() => setBenevityOpen(false)} />
+                  </>
+                )}
 
-  {/* Sign Out */}
-  <Button
-    variant="outline"
-    size="sm"
-    onClick={() => signOut({ callbackUrl: "/login" })}
-    className="flex items-center gap-1.5 h-9 px-3"
-  >
-    <LogOut size={16} />
-    <span className="hidden sm:inline">Sign out</span>
-  </Button>
-</div>
+                {/* Sign Out */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="flex items-center gap-1.5 h-9 px-3"
+                >
+                  <LogOut size={16} />
+                  <span className="hidden sm:inline">Sign out</span>
+                </Button>
+              </div>
 
+              {/* Mobile sign out button (visible on sm and down) */}
+              <div className="flex sm:hidden items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="h-9 w-9"
+                  title="Sign out"
+                >
+                  <LogOut size={16} />
+                </Button>
+
+                {/* Mobile menu button */}
+                {permissions.includes("payment_insights:manage_users") && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    className="h-9 w-9"
+                  >
+                    {mobileMenuOpen ? <X size={16} /> : <Menu size={16} />}
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* Mobile menu dropdown */}
+          {mobileMenuOpen && permissions.includes("payment_insights:manage_users") && (
+            <div className="sm:hidden border-t bg-white pb-4 px-4 space-y-2 pt-3">
+              <Button
+                size="sm"
+                className="w-full flex items-center gap-2 bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-10"
+                onClick={() => {
+                  setOpen(true)
+                  setMobileMenuOpen(false)
+                }}
+              >
+                <UserPlus2 size={16} />
+                Manage Access
+              </Button>
+              <ManageAccessModal open={open} onClose={() => setOpen(false)} />
+
+              <Button
+                size="sm"
+                className="w-full flex items-center gap-2 bg-[#A2BD9D] hover:bg-[#8FA889] text-white h-10"
+                onClick={() => {
+                  setUploadOpen(true)
+                  setMobileMenuOpen(false)
+                }}
+              >
+                <DatabaseZap size={16} />
+                Add Transaction Data
+              </Button>
+              <UploadTransactionModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full flex items-center gap-2 h-10 border-[#A2BD9D] text-[#5a7a55] hover:bg-[#A2BD9D]/10"
+                onClick={() => {
+                  setBenevityOpen(true)
+                  setMobileMenuOpen(false)
+                }}
+              >
+                <Heart size={16} />
+                Upload Corporate
+              </Button>
+              <UploadBenevityModal open={benevityOpen} onClose={() => setBenevityOpen(false)} />
+            </div>
+          )}
         </div>
       </header>
 
