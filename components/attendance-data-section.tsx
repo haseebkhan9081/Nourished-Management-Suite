@@ -383,7 +383,7 @@ console.log("attendace data ",data)
     setHasMore(false)
   }
 
-  const handleExcelDataCommitted = (data: ParsedExcelData[]) => {
+  const handleExcelDataCommitted = () => {
     if (hasValidFilter()) {
       resetAndFetch()
     }
@@ -442,13 +442,12 @@ console.log("attendace data ",data)
                     Add New Day
                   </Button>
                 )}
-                {viewMode === "month" && selectedMonth && (
-                  <AttendanceReportGenerator 
-                    selectedSchoolId={selectedSchoolId} 
-                    selectedMonth={selectedMonth} 
-                    students={students}
-                  />
-                )}
+                <AttendanceReportGenerator
+                  selectedSchoolId={selectedSchoolId}
+                  selectedMonth={selectedMonth}
+                  students={students}
+                />
+
               </div>
             </div>
 
