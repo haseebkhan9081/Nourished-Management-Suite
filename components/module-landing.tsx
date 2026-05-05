@@ -8,6 +8,7 @@ import {
   CreditCard,
   Receipt,
   Mail,
+  BarChart3,
   ArrowRight,
   LucideIcon,
 } from "lucide-react"
@@ -90,6 +91,22 @@ const MODULES: Module[] = [
       "Send history & delivery tracking",
     ],
     accent: "from-[#D4A574] to-[#B8894F]",
+  },
+  {
+    label: "Analytics",
+    href: "/analytics",
+    icon: BarChart3,
+    tagline: "Charts and trends across meals, attendance, and operations",
+    description:
+      "Operational analytics for partner schools — meal cost trends, daily service counts, attendance averages, expense breakdowns, and teacher attendance summaries.",
+    bullets: [
+      "Total meals served and average attendance",
+      "Meal cost & quotation trends",
+      "Students vs. boxes served correlations",
+      "Class-wise attendance averages",
+      "Teacher attendance and average time",
+    ],
+    accent: "from-[#7DA8C0] to-[#5A8AA5]",
   },
 ]
 

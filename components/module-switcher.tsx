@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { ChevronDown, School, CreditCard, Receipt, Mail, Home, Check } from "lucide-react"
+import { ChevronDown, School, CreditCard, Receipt, Mail, Home, BarChart3, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -34,6 +34,7 @@ const MODULES: ModuleEntry[] = [
   },
   { label: "Donation Receipts", href: "/donation-receipt", icon: Receipt },
   { label: "Donor Outreach", href: "/donor-outreach", icon: Mail },
+  { label: "Analytics", href: "/analytics", icon: BarChart3 },
 ]
 
 function isActive(pathname: string | null, href: string) {

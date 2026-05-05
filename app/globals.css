@@ -12,6 +12,11 @@ body {
   }
 }
 
+.analytics-scope {
+  --primary: 111 20% 68%;
+  --primary-foreground: 0 0% 100%;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
