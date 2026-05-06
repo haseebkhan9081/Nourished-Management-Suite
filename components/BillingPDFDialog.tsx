@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 
 interface BillingPDFDialogProps {
   open: boolean;
@@ -11,6 +12,8 @@ interface BillingPDFDialogProps {
   onGeneratePDF: () => void;
   schoolName: string | null;
   selectedMonth: string;
+  isGenerating?: boolean;
+  errorMessage?: string | null;
 }
 
 export function BillingPDFDialog({
@@ -21,6 +24,8 @@ export function BillingPDFDialog({
   onGeneratePDF,
   schoolName,
   selectedMonth,
+  isGenerating = false,
+  errorMessage = null,
 }: BillingPDFDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,17 +63,31 @@ export function BillingPDFDialog({
               <br />• Purpose: Payment confirmation & cross-check
             </p>
           </div>
+          {errorMessage && (
+            <p className="text-sm text-red-500">{errorMessage}</p>
+          )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isGenerating}
+          >
             Cancel
           </Button>
           <Button
             onClick={onGeneratePDF}
             className="bg-[#A2BD9D] hover:bg-[#8FA889]"
-            disabled={!mealProviderName.trim()}
+            disabled={!mealProviderName.trim() || isGenerating}
           >
-            Generate PDF
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              "Generate PDF"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

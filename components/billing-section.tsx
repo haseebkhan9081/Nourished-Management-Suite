@@ -48,6 +48,8 @@ export function BillingSection({ selectedSchoolId, schoolNamep }: BillingSection
   const [schoolName, setSchoolName] = useState(schoolNamep)
   const [showProviderDialog, setShowProviderDialog] = useState(false)
   const [mealProviderName, setMealProviderName] = useState("")
+  const [generatingInvoice, setGeneratingInvoice] = useState(false)
+  const [invoiceError, setInvoiceError] = useState<string | null>(null)
   const formatCurrency = (amount: number) => {
     return amount.toLocaleString("en-PK", {
       minimumFractionDigits: 0,
@@ -116,283 +118,55 @@ console.log("billing meal data ",data)
   }
 
   const handleDownloadClick = () => {
+    setInvoiceError(null)
     setShowProviderDialog(true)
   }
 
-  const generatePDF = async () => {
-    if (!mealProviderName.trim()) {
-      alert("Please enter the meal provider's name")
-      return
+  const handleDialogOpenChange = (open: boolean) => {
+    if (generatingInvoice) return
+    if (!open) {
+      setMealProviderName("")
+      setInvoiceError(null)
     }
+    setShowProviderDialog(open)
+  }
+
+  const generatePDF = async () => {
+    if (!mealProviderName.trim() || !selectedSchoolId || !selectedMonth) return
+
+    setGeneratingInvoice(true)
+    setInvoiceError(null)
 
     try {
-      // Dynamic import to avoid SSR issues
-      const jsPDF = (await import("jspdf")).default
-      const doc = new jsPDF()
-
-      // PDF styling constants
-      const pageWidth = doc.internal.pageSize.width
-      const pageHeight = doc.internal.pageSize.height
-      const margin = 20
-      const contentWidth = pageWidth - margin * 2
-      let yPosition = margin
-
-      // Helper function to check if we need a new page
-      const checkPageBreak = (requiredHeight: number) => {
-        if (yPosition + requiredHeight > pageHeight - margin) {
-          doc.addPage()
-          yPosition = margin
-          return true
-        }
-        return false
-      }
-
-      // Load and add logo
-      try {
-        const logoImg = new Image()
-        logoImg.crossOrigin = "anonymous"
-
-        await new Promise((resolve, reject) => {
-          logoImg.onload = resolve
-          logoImg.onerror = reject
-          logoImg.src = "/images/nourished-logo.png"
-        })
-
-        // Clean white header
-        doc.setFillColor(255, 255, 255) // White background
-        doc.rect(0, 0, pageWidth, 50, "F")
-
-        // Add subtle border at bottom of header
-        doc.setDrawColor(162, 189, 157)
-        doc.setLineWidth(2)
-        doc.line(0, 50, pageWidth, 50)
-
-        // Add logo to header
-        const logoWidth = 35
-        const logoHeight = 20
-        const logoX = margin
-        const logoY = 10
-
-        doc.addImage(logoImg, "PNG", logoX, logoY, logoWidth, logoHeight)
-
-        // Company name next to logo
-        doc.setFontSize(20)
-        doc.setFont("helvetica", "bold")
-        doc.setTextColor(162, 189, 157) // Primary color for text
-        doc.text("Nourished Welfare Trust", logoX + logoWidth + 10, 20)
-
-        // Invoice title
-        doc.setFontSize(26)
-        doc.setFont("helvetica", "bold")
-        doc.setTextColor(40, 40, 40) // Dark gray
-        doc.text("MEAL SERVICE INVOICE", pageWidth / 2, 35, { align: "center" })
-
-        doc.setFontSize(11)
-        doc.setFont("helvetica", "normal")
-        doc.setTextColor(100, 100, 100) // Light gray
-        doc.text("Payment Confirmation & Cross-Check", pageWidth / 2, 43, { align: "center" })
-
-        yPosition = 65
-      } catch (logoError) {
-        console.warn("Could not load logo, proceeding without it:", logoError)
-
-        // Fallback header without logo - also white
-        doc.setFillColor(255, 255, 255)
-        doc.rect(0, 0, pageWidth, 40, "F")
-
-        // Add subtle border
-        doc.setDrawColor(162, 189, 157)
-        doc.setLineWidth(2)
-        doc.line(0, 40, pageWidth, 40)
-
-        doc.setFontSize(26)
-        doc.setFont("helvetica", "bold")
-        doc.setTextColor(40, 40, 40)
-        doc.text("MEAL SERVICE INVOICE", pageWidth / 2, 22, { align: "center" })
-
-        doc.setFontSize(11)
-        doc.setFont("helvetica", "normal")
-        doc.setTextColor(100, 100, 100)
-        doc.text("Payment Confirmation & Cross-Check", pageWidth / 2, 30, { align: "center" })
-        yPosition = 55
-      }
-
-      // Invoice details section
-      const invoiceDate = new Date().toLocaleDateString("en-PK", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-      const monthYear = new Date(selectedMonth + "-01").toLocaleDateString("en-PK", {
-        year: "numeric",
-        month: "long",
-      })
-
-      // Organization details (Payer)
-      doc.setFontSize(14)
-      doc.setFont("helvetica", "bold")
-      doc.setTextColor(162, 189, 157)
-      doc.text("PAYING ENTITY", margin, yPosition)
-      yPosition += 8
-
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(12)
-      doc.setTextColor(40, 40, 40)
-      doc.text("Nourished Welfare Trust", margin, yPosition)
-      yPosition += 6
-
-      doc.setFont("helvetica", "normal")
-      doc.setFontSize(10)
-      doc.text("Email: info@nourishedusa.org", margin, yPosition)
-      yPosition += 6
-      doc.text(`School: ${schoolNamep}`, margin, yPosition)
-      yPosition += 15
-
-      // Service provider details
-      doc.setFontSize(14)
-      doc.setFont("helvetica", "bold")
-      doc.setTextColor(162, 189, 157)
-      doc.text("SERVICE PROVIDER", margin, yPosition)
-      yPosition += 8
-
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(12)
-      doc.setTextColor(40, 40, 40)
-      doc.text(mealProviderName, margin, yPosition)
-      yPosition += 15
-
-      // Invoice info box
-      doc.setFillColor(248, 249, 250)
-      doc.rect(margin, yPosition, contentWidth, 25, "F")
-      doc.setDrawColor(162, 189, 157)
-      doc.setLineWidth(1)
-      doc.rect(margin, yPosition, contentWidth, 25, "S")
-
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(10)
-      doc.setTextColor(40, 40, 40)
-      doc.text("INVOICE DATE:", margin + 5, yPosition + 8)
-      doc.text("SERVICE PERIOD:", margin + 5, yPosition + 16)
-      doc.text("TOTAL AMOUNT:", margin + 100, yPosition + 12)
-
-      doc.setFont("helvetica", "normal")
-      doc.text(invoiceDate, margin + 35, yPosition + 8)
-      doc.text(monthYear, margin + 40, yPosition + 16)
-
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(12)
-      doc.setTextColor(162, 189, 157)
-      doc.text(`PKR ${formatCurrency(totalAmount)}`, margin + 135, yPosition + 12)
-      yPosition += 35
-
-      // Table header
-      checkPageBreak(50)
-      doc.setFillColor(162, 189, 157)
-      doc.rect(margin, yPosition, contentWidth, 12, "F")
-
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(10)
-      doc.setTextColor(255, 255, 255)
-      doc.text("DATE", margin + 3, yPosition + 8)
-      doc.text("ITEM DESCRIPTION", margin + 35, yPosition + 8)
-      doc.text("UNIT PRICE", margin + 110, yPosition + 8)
-      doc.text("QTY", margin + 140, yPosition + 8)
-      doc.text("TOTAL", margin + 160, yPosition + 8)
-      yPosition += 15
-
-      // Table content - Show ALL items for each day
-      doc.setFont("helvetica", "normal")
-      doc.setFontSize(9)
-      doc.setTextColor(40, 40, 40)
-
-      const sortedDates = Object.entries(groupedBillingData).sort(
-        ([a], [b]) => a.localeCompare(b)
-      );
-
-      let rowIndex = 0
-      for (const [date, data] of sortedDates) {
-        // Use string formatting only, never Date object
-        // Use:
-const formattedDate = new Date(date).toLocaleDateString("en-PK", { month: "short", day: "numeric" })
-        // Show each item for this date
-        for (let i = 0; i < data.items.length; i++) {
-          const item = data.items[i]
-          checkPageBreak(10)
-
-          // Alternating row background
-          if (rowIndex % 2 === 0) {
-            doc.setFillColor(252, 252, 252)
-            doc.rect(margin, yPosition - 2, contentWidth, 10, "F")
-          }
-
-          // Show date only for first item of each day
-          if (i === 0) {
-            doc.setFont("helvetica", "bold")
-            doc.text(formattedDate, margin + 3, yPosition + 6)
-            doc.setFont("helvetica", "normal")
-          }
-
-          // Item details
-          doc.text(item.item_name, margin + 35, yPosition + 6)
-          doc.text(`PKR ${formatCurrency(item.unit_price)}`, margin + 110, yPosition + 6)
-          doc.text(item.quantity.toString(), margin + 143, yPosition + 6)
-          doc.text(`PKR ${formatCurrency(item.total_cost)}`, margin + 160, yPosition + 6)
-
-          // Draw row separator
-          doc.setDrawColor(230, 230, 230)
-          doc.setLineWidth(0.3)
-          doc.line(margin, yPosition + 8, pageWidth - margin, yPosition + 8)
-
-          yPosition += 10
-          rowIndex++
-        }
-
-        
-      }
-
-      // Final total section
-      checkPageBreak(30)
-      yPosition += 10
-      doc.setFillColor(162, 189, 157)
-      doc.rect(margin, yPosition, contentWidth, 20, "F")
-
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(16)
-      doc.setTextColor(255, 255, 255)
-      doc.text("TOTAL AMOUNT DUE", margin + 10, yPosition + 8)
-      doc.text(`PKR ${formatCurrency(totalAmount)}`, pageWidth - margin - 10, yPosition + 8, { align: "right" })
-
-      doc.setFontSize(10)
-      doc.text(`Service Period: ${monthYear}`, margin + 10, yPosition + 16)
-      doc.text(`Total Days: ${Object.keys(groupedBillingData).length}`, pageWidth - margin - 10, yPosition + 16, {
-        align: "right",
-      })
-
-      // Footer with logo reference
-      yPosition = pageHeight - 25
-      doc.setFontSize(9)
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(100, 100, 100)
-      doc.text(
-        "This invoice serves as payment confirmation and cross-check for meal services provided to our school.",
-        pageWidth / 2,
-        yPosition,
-        { align: "center" },
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/billing/invoice/generate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schoolId: selectedSchoolId,
+            month: selectedMonth,
+            mealProviderName: mealProviderName.trim(),
+          }),
+        },
       )
-      doc.text("Nourished Welfare Trust | info@nourishedusa.org", pageWidth / 2, yPosition + 6, {
-        align: "center",
-      })
 
-      // Save the PDF
-      const fileName = `meal-invoice-${mealProviderName.replace(/\s+/g, "-")}-${selectedMonth}.pdf`
-      doc.save(fileName)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to generate invoice")
+      }
+      if (!data.downloadUrl) {
+        throw new Error("Backend did not return a download URL")
+      }
 
-      // Close dialog and reset
+      window.location.href = data.downloadUrl
+
       setShowProviderDialog(false)
       setMealProviderName("")
     } catch (error) {
-      console.error("Error generating PDF:", error)
-      alert("Error generating PDF. Please try again.")
+      setInvoiceError(error instanceof Error ? error.message : "Failed to generate invoice")
+    } finally {
+      setGeneratingInvoice(false)
     }
   }
 
@@ -478,12 +252,14 @@ const formattedDate = new Date(date).toLocaleDateString("en-PK", { month: "short
       {/* Meal Provider Dialog */}
       <BillingPDFDialog
         open={showProviderDialog}
-        onOpenChange={setShowProviderDialog}
+        onOpenChange={handleDialogOpenChange}
         mealProviderName={mealProviderName}
         setMealProviderName={setMealProviderName}
         schoolName={schoolNamep}
         selectedMonth={selectedMonth}
         onGeneratePDF={generatePDF}
+        isGenerating={generatingInvoice}
+        errorMessage={invoiceError}
       />
     </>
   );
