@@ -53,12 +53,7 @@ function getHealth(device: Device): Health {
   if (device.status === "online" || device.status === "stale" || device.status === "offline") {
     return device.status
   }
-  if (!device.last_ping) return "unknown"
-  const ageMs = Date.now() - new Date(device.last_ping).getTime()
-  const minutes = ageMs / 60000
-  if (minutes < 15) return "online"
-  if (minutes < 60 * 24) return "stale"
-  return "offline"
+  return "unknown"
 }
 
 function formatRelative(value: string | null): string {
