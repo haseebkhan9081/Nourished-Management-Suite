@@ -3,8 +3,20 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Fingerprint, ScanFace, Users, Wifi, Network, Cpu, MapPin, Clock, Power, ClipboardList } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Fingerprint, ScanFace, Users, Wifi, Network, Cpu, MapPin, Clock, Power, ClipboardList, RefreshCw } from "lucide-react"
 import { LoadingOverlay } from "./LoadingOverlay"
+
+const POLL_INTERVAL_MS = 15000
+
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 5) return "just now"
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  return `${Math.floor(minutes / 60)}h ago`
+}
 
 interface DevicesSectionProps {
   selectedSchoolId: number | null
@@ -164,32 +176,88 @@ function DeviceCard({ device }: { device: Device }) {
 export function DevicesSection({ selectedSchoolId }: DevicesSectionProps) {
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   useEffect(() => {
     if (!selectedSchoolId) {
       setDevices([])
+      setLastUpdated(null)
       return
     }
 
-    const fetchDevices = async () => {
-      setLoading(true)
+    let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let abortController: AbortController | null = null
+    let hasLoadedOnce = false
+
+    const doFetch = async () => {
+      if (cancelled) return
+      abortController?.abort()
+      abortController = new AbortController()
+
+      const isInitial = !hasLoadedOnce
+      if (isInitial) setLoading(true)
+      else setRefreshing(true)
+
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/machines?school_id=${selectedSchoolId}`
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/machines?school_id=${selectedSchoolId}`,
+          { signal: abortController.signal },
         )
         if (!res.ok) throw new Error("Failed to fetch devices!")
         const data: MachinesResponse = await res.json()
+        if (cancelled) return
         setDevices(data.machines || [])
+        setLastUpdated(new Date())
+        hasLoadedOnce = true
       } catch (error) {
+        if ((error as Error)?.name === "AbortError") return
         console.error("Error fetching devices:", error)
-        setDevices([])
+        if (isInitial) setDevices([])
       } finally {
-        setLoading(false)
+        if (!cancelled) {
+          if (isInitial) setLoading(false)
+          else setRefreshing(false)
+          scheduleNext()
+        }
       }
     }
 
-    fetchDevices()
-  }, [selectedSchoolId])
+    const scheduleNext = () => {
+      if (cancelled) return
+      if (timeoutId) clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        if (document.visibilityState === "hidden") {
+          // user isn't looking — postpone
+          scheduleNext()
+          return
+        }
+        doFetch()
+      }, POLL_INTERVAL_MS)
+    }
+
+    const handleVisibility = () => {
+      if (cancelled) return
+      if (document.visibilityState === "visible") {
+        if (timeoutId) clearTimeout(timeoutId)
+        doFetch()
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    doFetch()
+
+    return () => {
+      cancelled = true
+      if (timeoutId) clearTimeout(timeoutId)
+      abortController?.abort()
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+  }, [selectedSchoolId, refreshTrigger])
+
+  const triggerRefresh = () => setRefreshTrigger((t) => t + 1)
 
   if (!selectedSchoolId) {
     return (
@@ -206,11 +274,30 @@ export function DevicesSection({ selectedSchoolId }: DevicesSectionProps) {
       {loading && <LoadingOverlay />}
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <CardTitle className="text-[#A2BD9D]">Biometric Devices</CardTitle>
-            <p className="text-xs text-gray-500">
-              {devices.length} device{devices.length === 1 ? "" : "s"}
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-gray-500">
+                {devices.length} device{devices.length === 1 ? "" : "s"}
+              </p>
+              {lastUpdated && (
+                <span className="text-xs text-gray-400" title={lastUpdated.toLocaleString()}>
+                  Updated {formatTimeAgo(lastUpdated)}
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-[#A2BD9D] hover:text-[#8FA889] hover:bg-[#A2BD9D]/10"
+                onClick={triggerRefresh}
+                disabled={loading || refreshing}
+                title="Refresh now"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                />
+              </Button>
+            </div>
           </div>
         </CardHeader>
       </Card>
